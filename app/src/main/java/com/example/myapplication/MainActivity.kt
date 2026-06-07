@@ -8,9 +8,11 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -33,46 +35,69 @@ class MainActivity : ComponentActivity() {
 fun AppNavigation() {
     val navController = rememberNavController()
 
-    NavHost(navController = navController, startDestination = "dashboard") {
-        // Halaman Pertama
+    NavHost(navController, startDestination = "login") {
+
+        composable("login") {
+            LoginScreen(
+                onNavigateToDashboard = { navController.navigate("dashboard") }
+            )
+        }
         composable("dashboard") {
             DashboardScreen(
-                onNavigateToPemeriksaan = {
-                    navController.navigate("pemeriksaan")
-                },
-                onNavigateToDataAnak = {
-                    navController.navigate("data_anak")
-                }
+                onNavigateToPemeriksaan = { navController.navigate("pemeriksaan") },
+                onNavigateToDataAnak = { navController.navigate("data_anak") },
+                onNavigateToImunisasi = { navController.navigate("imunisasi") }
             )
         }
-        
-        // Halaman Kedua
         composable("pemeriksaan") {
             PemeriksaanScreen(
-                onNavigateBack = {
-                    navController.popBackStack() // Kembali ke halaman sebelumnya
-                }
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToHasil = { navController.navigate("hasil") }
             )
         }
-
-        // Halaman Ketiga
+        composable("hasil") {
+            HasilScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable("imunisasi") {
+            ImunisasiScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
         composable("data_anak") {
             DataAnakScreen(
-                onNavigateBack = {
-                    navController.popBackStack()
-                },
-                onNavigateToDetail = {
-                    navController.navigate("detail_anak")
+                onAnakClick = { anak -> navController.navigate("riwayat/${anak.nama}") },
+                onTambahClick = { navController.navigate("daftar_anak_baru") },
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable("daftar_anak_baru") {
+            DaftarAnakBaruScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToHubung = { navController.navigate("hubung_orang_tua") }
+            )
+        }
+        composable("hubung_orang_tua") {
+            HubungOrangTuaScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateNext = {
+                    // Navigate back to dashboard or success screen
+                    navController.navigate("dashboard") {
+                        popUpTo("dashboard") { inclusive = true }
+                    }
                 }
             )
         }
-
-        // Halaman Detail
-        composable("detail_anak") {
-            DetailAnakScreen(
-                onNavigateBack = {
-                    navController.popBackStack()
-                }
+        composable(
+            route = "riwayat/{namaAnak}",
+            arguments = listOf(navArgument("namaAnak") { type = NavType.StringType })
+        ) { backStack ->
+            RiwayatScreen(
+                namaAnak = backStack.arguments?.getString("namaAnak") ?: "",
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToPemeriksaan = { navController.navigate("pemeriksaan") },
+                onNavigateToImunisasi = { navController.navigate("imunisasi") }
             )
         }
     }

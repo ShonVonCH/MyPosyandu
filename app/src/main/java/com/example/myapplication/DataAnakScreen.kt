@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -19,215 +20,325 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// Data Class sederhana untuk list anak
-data class Anak(
-    val nama: String,
-    val status: String,
-    val tb: Int,
-    val bb: Int,
-    val umur: Int,
-    val tanggal: String
+// ════════════════════════════════════════════════════════════
+//  DATA MODEL
+// ════════════════════════════════════════════════════════════
+
+data class AnakData(
+    val nama       : String,
+    val status     : String,
+    val tinggiBadan: Int,
+    val beratBadan : Int,
+    val umurBulan  : Int,
+    val tanggal    : String
 )
 
+// ════════════════════════════════════════════════════════════
+//  SAMPLE DATA
+// ════════════════════════════════════════════════════════════
+
+private val dummyAnakList = List(6) {
+    AnakData(
+        nama        = "Michael Kwok",
+        status      = "Gizi Kurang",
+        tinggiBadan = 100,
+        beratBadan  = 40,
+        umurBulan   = 36,
+        tanggal     = "Apr 2025"
+    )
+}
+
+// ════════════════════════════════════════════════════════════
+//  SCREEN ENTRY POINT
+// ════════════════════════════════════════════════════════════
+
 @Composable
-fun DataAnakScreen(onNavigateBack: () -> Unit = {}, onNavigateToDetail: () -> Unit = {}) {
-    // Background utama layar
-    val backgroundColor = Color(0xFF121212) 
-    
-    // State untuk Search Bar
+fun DataAnakScreen(
+    anakList: List<AnakData> = dummyAnakList,
+    onTambahClick: () -> Unit = {},
+    onAnakClick: (AnakData) -> Unit = {},
+    onNavigateBack: () -> Unit = {}
+) {
     var searchQuery by remember { mutableStateOf("") }
 
-    // Dummy data untuk List
-    val listAnak = List(5) {
-        Anak("Michael Kwok", "Gizi Kurang", 100, 40, 36, "Apr 2025")
+    val filteredList = remember(searchQuery, anakList) {
+        if (searchQuery.isBlank()) anakList
+        else anakList.filter { it.nama.contains(searchQuery, ignoreCase = true) }
     }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(backgroundColor)
+            .background(BackgroundDark)
     ) {
-        // 1. Header Hijau
-        DataAnakHeader(onBack = onNavigateBack)
-
-        // 2. Search Bar
-        SearchBarSection(
-            query = searchQuery,
-            onQueryChange = { searchQuery = it }
+        // ── Header (fixed at top, not scrollable) ──────────
+        DataAnakHeader(
+            jumlahAnak = anakList.size,
+            onBack = onNavigateBack
         )
 
-        // 3. List Data Anak (Bisa di-scroll)
+        // ── Scrollable body ────────────────────────────────
         LazyColumn(
-            modifier = Modifier.weight(1f)
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
         ) {
-            items(listAnak.size) { index ->
+            item {
+                Spacer(modifier = Modifier.height(20.dp))
+                SearchBarSection(
+                    query       = searchQuery,
+                    onQueryChange = { searchQuery = it },
+                    modifier    = Modifier.padding(horizontal = 16.dp)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            items(filteredList) { anak ->
                 AnakListItem(
-                    anak = listAnak[index],
-                    onClick = onNavigateToDetail
+                    data    = anak,
+                    onClick = { onAnakClick(anak) }
                 )
             }
+
+            item { Spacer(modifier = Modifier.height(16.dp)) }
         }
 
-        // 4. Tombol Tambah Anak (Nempel di bawah)
-        TambahAnakButton()
-    }
-}
-
-@Composable
-fun DataAnakHeader(onBack: () -> Unit) {
-    val headerColor = Color(0xFF2E9E7B) // Hijau Tosca
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(headerColor)
-            .padding(top = 40.dp, bottom = 24.dp, start = 24.dp, end = 24.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.ArrowBack,
-                contentDescription = "Back",
-                tint = Color.White,
-                modifier = Modifier
-                    .size(24.dp)
-                    .clickable { onBack() }
-            )
-            Text(
-                text = "MyPosyandu",
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                fontSize = 16.sp,
-                modifier = Modifier.weight(1f),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-            )
-            Spacer(modifier = Modifier.width(24.dp)) // To balance the back icon
-        }
-        Spacer(modifier = Modifier.height(24.dp))
-        Text(
-            text = "Data Anak",
-            color = Color.White,
-            fontWeight = FontWeight.Bold,
-            fontSize = 24.sp
-        )
-        Text(
-            text = "5 Anak Terdaftar",
-            color = Color(0xCCFFFFFF), // Light transparent white
-            fontSize = 14.sp
+        // ── Bottom button (always visible) ─────────────────
+        TambahAnakButton(
+            onClick  = onTambahClick,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
         )
     }
 }
 
+// ════════════════════════════════════════════════════════════
+//  1. HEADER
+// ════════════════════════════════════════════════════════════
+
 @Composable
-fun SearchBarSection(query: String, onQueryChange: (String) -> Unit) {
-    val searchBoxBg = Color(0xFF2A2A2A)
-    
+fun DataAnakHeader(jumlahAnak: Int, onBack: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp)
-            .background(searchBoxBg, RoundedCornerShape(8.dp))
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .background(HeaderGreen)
+            .padding(start = 20.dp, end = 20.dp, top = 40.dp, bottom = 24.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = Icons.Default.Search,
-                contentDescription = "Search",
-                tint = Color.Gray,
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            BasicTextField(
-                value = query,
-                onValueChange = onQueryChange,
-                textStyle = TextStyle(color = Color.White, fontSize = 14.sp),
-                cursorBrush = SolidColor(Color.White),
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // App bar title with Back Icon
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                decorationBox = { innerTextField ->
-                    if (query.isEmpty()) {
-                        Text(text = "Cari nama balita..", color = Color.Gray, fontSize = 14.sp)
-                    }
-                    innerTextField()
-                }
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ArrowBack,
+                    contentDescription = "Back",
+                    tint = TextWhite,
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clickable { onBack() }
+                )
+                Text(
+                    text = "MyPosyandu",
+                    color = TextWhite,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.width(24.dp)) // To balance the back icon
+            }
+            
+            Spacer(modifier = Modifier.height(20.dp))
+            Text(
+                text       = "Data Anak",
+                color      = TextWhite,
+                fontSize   = 26.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text       = "$jumlahAnak Anak Terdaftar",
+                color      = TextGreenLight,
+                fontSize   = 14.sp,
+                fontWeight = FontWeight.Normal
             )
         }
     }
 }
 
-@Composable
-fun AnakListItem(anak: Anak, onClick: () -> Unit) {
-    val avatarColor = Color(0xFF98E6C8) // Mint
-    val dividerColor = Color(0xFF333333)
+// ════════════════════════════════════════════════════════════
+//  2. SEARCH BAR
+// ════════════════════════════════════════════════════════════
 
-    Column {
+@Composable
+fun SearchBarSection(
+    query        : String,
+    onQueryChange: (String) -> Unit,
+    modifier     : Modifier = Modifier
+) {
+    BasicTextField(
+        value         = query,
+        onValueChange = onQueryChange,
+        singleLine    = true,
+        cursorBrush   = SolidColor(AccentGreen),
+        textStyle     = TextStyle(
+            color    = TextWhite,
+            fontSize = 14.sp
+        ),
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(SurfaceDark)
+            .padding(horizontal = 14.dp, vertical = 14.dp),
+        decorationBox = { innerTextField ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    imageVector        = Icons.Filled.Search,
+                    contentDescription = "Cari",
+                    tint               = TextGrey,
+                    modifier           = Modifier.size(20.dp)
+                )
+                Box(modifier = Modifier.weight(1f)) {
+                    if (query.isEmpty()) {
+                        Text(
+                            text     = "Cari nama balita..",
+                            color    = TextGrey,
+                            fontSize = 14.sp
+                        )
+                    }
+                    innerTextField()
+                }
+            }
+        }
+    )
+}
+
+// ════════════════════════════════════════════════════════════
+//  3. LIST ITEM
+// ════════════════════════════════════════════════════════════
+
+@Composable
+fun AnakListItem(
+    data   : AnakData,
+    onClick: () -> Unit = {}
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .background(SurfaceDark)
+            .padding(horizontal = 16.dp, vertical = 14.dp)
+    ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onClick() }
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment    = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Avatar Lingkaran
+            // Avatar circle
             Box(
                 modifier = Modifier
                     .size(48.dp)
                     .clip(CircleShape)
-                    .background(avatarColor)
+                    .background(CircleMint)
             )
-            
-            Spacer(modifier = Modifier.width(16.dp))
-            
-            // Info Anak (Tengah)
+
+            // Name + stats (takes remaining space)
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = anak.nama, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                Text(text = anak.status, color = Color.LightGray, fontSize = 12.sp)
                 Text(
-                    text = "TB: ${anak.tb}  BB: ${anak.bb}  Umur: ${anak.umur} Bulan",
-                    color = Color.Gray,
+                    text       = data.nama,
+                    color      = TextWhite,
+                    fontSize   = 15.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text     = data.status,
+                    color    = TextGrey,
+                    fontSize = 13.sp
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text     = "TB: ${data.tinggiBadan}  BB: ${data.beratBadan}  Umur: ${data.umurBulan} Bulan",
+                    color    = TextGrey,
                     fontSize = 12.sp
                 )
             }
-            
-            // Tanggal (Kanan)
+
+            // Date — pinned to bottom-right via Arrangement
             Text(
-                text = anak.tanggal,
-                color = Color.Gray,
+                text     = data.tanggal,
+                color    = TextGrey,
                 fontSize = 12.sp,
                 modifier = Modifier.align(Alignment.Bottom)
             )
         }
-        Divider(color = dividerColor, thickness = 1.dp)
+    }
+
+    Divider(
+        color     = SurfaceDarkBorder,
+        thickness = 0.8.dp
+    )
+}
+
+// ════════════════════════════════════════════════════════════
+//  4. TAMBAH ANAK BUTTON
+// ════════════════════════════════════════════════════════════
+
+@Composable
+fun TambahAnakButton(
+    onClick : () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(BackgroundDark)
+            .border(
+                width  = 1.dp,
+                color  = TextWhite,
+                shape  = RoundedCornerShape(14.dp)
+            )
+            .clickable(onClick = onClick)
+            .padding(vertical = 16.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            verticalAlignment     = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(
+                imageVector        = Icons.Default.Person,
+                contentDescription = "Tambah Anak",
+                tint               = TextWhite,
+                modifier           = Modifier.size(20.dp)
+            )
+            Text(
+                text       = "Tambah Anak Baru",
+                color      = TextWhite,
+                fontSize   = 15.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
     }
 }
 
+// ════════════════════════════════════════════════════════════
+//  PREVIEW
+// ════════════════════════════════════════════════════════════
+
+@Preview(showBackground = true, showSystemUi = true, backgroundColor = 0xFF121212)
 @Composable
-fun TambahAnakButton() {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp)
-            .border(1.dp, Color.White, RoundedCornerShape(8.dp))
-            .clickable { /* Aksi tambah anak */ }
-            .padding(vertical = 12.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = Icons.Default.Person,
-                contentDescription = "Tambah",
-                tint = Color.White,
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(text = "Tambah Anak Baru", color = Color.White, fontWeight = FontWeight.Bold)
-        }
-    }
+fun DataAnakScreenPreview() {
+    DataAnakScreen()
 }

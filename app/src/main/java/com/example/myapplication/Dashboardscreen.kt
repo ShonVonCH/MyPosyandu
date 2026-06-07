@@ -35,7 +35,8 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun DashboardScreen(
     onNavigateToPemeriksaan: () -> Unit = {},
-    onNavigateToDataAnak: () -> Unit = {}
+    onNavigateToDataAnak: () -> Unit = {},
+    onNavigateToImunisasi: () -> Unit = {}
 ) {
     Box(
         modifier = Modifier
@@ -73,7 +74,7 @@ fun DashboardScreen(
                     modifier = Modifier.padding(horizontal = 16.dp),
                     onPemeriksaanClick = onNavigateToPemeriksaan,
                     onDataAnakClick    = onNavigateToDataAnak,
-                    onVaksinClick      = { /* navigate */ },
+                    onVaksinClick      = onNavigateToImunisasi,
                     onLaporanClick     = { /* navigate */ }
                 )
             }

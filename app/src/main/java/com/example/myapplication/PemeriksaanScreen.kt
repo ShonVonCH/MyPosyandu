@@ -9,10 +9,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.Icon
-import androidx.compose.material.IconButton
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,115 +26,194 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+// ─────────────────────────────────────────────────────────────
+//  Local token (konsisten dengan HasilScreen.kt)
+// ─────────────────────────────────────────────────────────────
+private val TabActiveBg   = Color(0xFF1E6B4E)   // hijau gelap — tab "Input" aktif
+private val TabActiveText = TextWhite
+private val TabIdleBg     = Color(0xFF3A3A3A)   // abu-abu — tab non-aktif
+private val TabIdleText   = Color(0xFFAAAAAA)
+
 // ════════════════════════════════════════════════════════════
 //  SCREEN ENTRY POINT
 // ════════════════════════════════════════════════════════════
 
 @Composable
-fun PemeriksaanScreen(onNavigateBack: () -> Unit = {}) {
-
-    // ── State Management ─────────────────────────────────────
+fun PemeriksaanScreen(
+    namaAnak       : String  = "Michael Kwok",
+    onNavigateBack : () -> Unit = {},
+    onNavigateToHasil: () -> Unit = {}
+) {
+    // ── State ────────────────────────────────────────────────
     var beratBadan    by remember { mutableStateOf("") }
     var tinggiBadan   by remember { mutableStateOf("") }
     var lingkarKepala by remember { mutableStateOf("") }
     var lingkarLengan by remember { mutableStateOf("") }
     var tanggal       by remember { mutableStateOf("26/05/2025") }
-    // ─────────────────────────────────────────────────────────
+    var activeTab     by remember { mutableStateOf(0) }
+    // ────────────────────────────────────────────────────────
 
-    LazyColumn(
+    Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(BackgroundDark),
-        contentPadding = PaddingValues(bottom = 32.dp)
+            .background(BackgroundDark)
     ) {
-        // 1. Header hijau atas
-        item {
-            PemeriksaanHeader(onBackClick = onNavigateBack)
-        }
+        // ①  Header baru — profil anak
+        HeaderProfilAnak(
+            namaAnak       = namaAnak,
+            onNavigateBack = onNavigateBack
+        )
 
-        // 2. Card Data Antropometri
-        item {
-            Spacer(modifier = Modifier.height(32.dp))
-            AntropometriCard(
-                beratBadan      = beratBadan,
-                onBeratChange   = { beratBadan = it },
-                tinggiBadan     = tinggiBadan,
-                onTinggiChange  = { tinggiBadan = it },
-                lingkarKepala   = lingkarKepala,
-                onKepalaChange  = { lingkarKepala = it },
-                lingkarLengan   = lingkarLengan,
-                onLenganChange  = { lingkarLengan = it },
-                modifier        = Modifier.padding(horizontal = 16.dp)
-            )
-        }
+        // ②  Tab row baru
+        PemeriksaanTabs(
+            activeTab     = activeTab,
+            onTabSelected = { activeTab = it }
+        )
 
-        // 3. Card Tanggal Pemeriksaan
-        item {
-            Spacer(modifier = Modifier.height(16.dp))
-            TanggalCard(
-                tanggal       = tanggal,
-                onTanggalChange = { tanggal = it },
-                modifier      = Modifier.padding(horizontal = 16.dp)
-            )
+        // ③  Form tetap di sini
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(bottom = 24.dp)
+        ) {
+            item { Spacer(modifier = Modifier.height(16.dp)) }
+
+            item {
+                AntropometriCard(
+                    beratBadan      = beratBadan,
+                    onBeratChange   = { beratBadan = it },
+                    tinggiBadan     = tinggiBadan,
+                    onTinggiChange  = { tinggiBadan = it },
+                    lingkarKepala   = lingkarKepala,
+                    onKepalaChange  = { lingkarKepala = it },
+                    lingkarLengan   = lingkarLengan,
+                    onLenganChange  = { lingkarLengan = it },
+                    modifier        = Modifier.padding(horizontal = 16.dp)
+                )
+            }
+            item { Spacer(modifier = Modifier.height(16.dp)) }
+            item {
+                TanggalCard(
+                    tanggal         = tanggal,
+                    onTanggalChange = { tanggal = it },
+                    modifier        = Modifier.padding(horizontal = 16.dp)
+                )
+            }
+            item { Spacer(modifier = Modifier.height(16.dp)) }
+            item {
+                AnalisisDanSimpanButton(
+                    onClick  = onNavigateToHasil,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+            }
+            item { Spacer(modifier = Modifier.height(32.dp)) }
         }
     }
 }
 
 // ════════════════════════════════════════════════════════════
-//  1. HEADER SECTION
+//  HEADER PROFIL ANAK
 // ════════════════════════════════════════════════════════════
 
 @Composable
-fun PemeriksaanHeader(onBackClick: () -> Unit = {}) {
+fun HeaderProfilAnak(
+    namaAnak      : String = "Michael Kwok",
+    subTitle      : String = "Michael Kwok36 Bulan ~ Laki-Laki",
+    halamanJudul  : String = "Pemeriksaan",
+    onNavigateBack: () -> Unit = {}
+) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(
-                color = HeaderGreen,
-                shape = RoundedCornerShape(
-                    topStart    = 0.dp,
-                    topEnd      = 0.dp,
-                    bottomStart = 0.dp,
-                    bottomEnd   = 0.dp
-                )
-            )
-            .padding(
-                start  = 20.dp,
-                end    = 20.dp,
-                top    = 48.dp,       // safe area + breathing room
-                bottom = 28.dp
-            )
+            .background(HeaderGreen)
+            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 20.dp)
     ) {
-        Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { onBackClick() }) {
-                    Icon(
-                        imageVector = Icons.Default.ArrowBack,
-                        contentDescription = "Kembali",
-                        tint = Color.White
-                    )
-                }
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+
+            // Tombol kembali — outlined, isi nama anak
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .border(1.dp, TextWhite, RoundedCornerShape(8.dp))
+                    .clickable(onClick = onNavigateBack)
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(
+                    imageVector        = Icons.Filled.ArrowBack,
+                    contentDescription = "Kembali",
+                    tint               = TextWhite,
+                    modifier           = Modifier.size(16.dp)
+                )
                 Text(
-                    text       = "Pemeriksaan",
-                    color      = TextWhite,
-                    fontSize   = 24.sp,
-                    fontWeight = FontWeight.Bold
+                    text     = namaAnak,
+                    color    = TextWhite,
+                    fontSize = 13.sp
                 )
             }
-            Spacer(modifier = Modifier.height(4.dp))
+
+            // Judul halaman
             Text(
-                text       = "Catat data kesehatan balita",
-                color      = TextGreenLight,
-                fontSize   = 14.sp,
-                fontWeight = FontWeight.Normal,
-                modifier = Modifier.padding(start = 48.dp) // Offset to align with title text next to back button
+                text       = halamanJudul,
+                color      = TextWhite,
+                fontSize   = 22.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            // Sub-judul profil anak
+            Text(
+                text     = subTitle,
+                color    = TextWhite.copy(alpha = 0.75f),
+                fontSize = 12.sp
             )
         }
     }
 }
 
 // ════════════════════════════════════════════════════════════
-//  2. CARD: DATA ANTROPOMETRI
+//  PEMERIKSAAN TABS
+// ════════════════════════════════════════════════════════════
+
+@Composable
+fun PemeriksaanTabs(
+    activeTab    : Int = 0,           // 0=Input, 1=Hasil, 2=Grafik TB/U, 3=Grafik BB/U
+    onTabSelected: (Int) -> Unit = {}
+) {
+    val tabs = listOf("Input", "Hasil", "Grafik\nTB/U", "Grafik\nBB/U")
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(BackgroundDark)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        tabs.forEachIndexed { index, label ->
+            val isActive = index == activeTab
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (isActive) TabActiveBg else TabIdleBg)
+                    .clickable { onTabSelected(index) }
+                    .padding(vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text       = label,
+                    color      = if (isActive) TabActiveText else TabIdleText,
+                    fontSize   = 11.sp,
+                    fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+                    lineHeight = 14.sp,
+                    maxLines   = 2
+                )
+            }
+        }
+    }
+}
+
+// ════════════════════════════════════════════════════════════
+//  CARD: DATA ANTROPOMETRI
 // ════════════════════════════════════════════════════════════
 
 @Composable
@@ -202,7 +281,7 @@ fun AntropometriCard(
 }
 
 // ════════════════════════════════════════════════════════════
-//  3. CARD: TANGGAL PEMERIKSAAN
+//  CARD: TANGGAL PEMERIKSAAN
 // ════════════════════════════════════════════════════════════
 
 @Composable
@@ -230,6 +309,29 @@ fun TanggalCard(
                 keyboardType  = KeyboardType.Number,
                 modifier      = Modifier.fillMaxWidth()
             )
+        }
+    }
+}
+
+// ════════════════════════════════════════════════════════════
+//  ANALISIS DAN SIMPAN BUTTON
+// ════════════════════════════════════════════════════════════
+
+@Composable
+fun AnalisisDanSimpanButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFF1A1A1A))
+            .border(1.dp, Color(0xFF555555), RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 15.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(Icons.Default.Assessment, null, tint = TextWhite, modifier = Modifier.size(20.dp))
+            Text("Analisis Dan Simpan", color = TextWhite, fontSize = 15.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -296,8 +398,6 @@ fun AntropometriField(
 
 // ════════════════════════════════════════════════════════════
 //  REUSABLE: CUSTOM INPUT BOX
-//  — border abu-abu, background dark, placeholder abu-abu,
-//    teks input putih, sudut membulat
 // ════════════════════════════════════════════════════════════
 
 @Composable
@@ -333,7 +433,6 @@ fun PemeriksaanInputBox(
             .padding(horizontal = 12.dp, vertical = 12.dp),
         decorationBox = { innerTextField ->
             Box(contentAlignment = Alignment.CenterStart) {
-                // Placeholder text — shown only when value is empty
                 if (value.isEmpty()) {
                     Text(
                         text     = placeholder,
