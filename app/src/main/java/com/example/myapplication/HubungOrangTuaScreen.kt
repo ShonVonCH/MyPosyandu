@@ -9,12 +9,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,6 +21,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -102,18 +103,26 @@ fun HubungOrangTuaScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Card 2: Cari akun orang tua (with dynamic list / confirmation)
-        CariAkunCard(
-            searchQuery     = searchQuery,
-            onSearchChange  = { searchQuery = it },
-            selectedAccount = selectedAccount,
-            onSelectAccount = { selectedAccount = it },
-            onClearAccount  = { selectedAccount = null },
-            modifier        = Modifier.padding(horizontal = 16.dp)
-        )
+        // Card 2: Cari akun orang tua atau Buat akun baru
+        if (selectedMethod == "existing") {
+            CariAkunCard(
+                searchQuery     = searchQuery,
+                onSearchChange  = { searchQuery = it },
+                selectedAccount = selectedAccount,
+                onSelectAccount = { selectedAccount = it },
+                onClearAccount  = { selectedAccount = null },
+                modifier        = Modifier.padding(horizontal = 16.dp)
+            )
+        } else {
+            FormAkunBaruCard(
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+        }
 
-        // Bottom CTA — only visible after account is selected
-        if (selectedAccount != null) {
+        // Bottom CTA
+        val showLanjut = if (selectedMethod == "existing") selectedAccount != null else true
+
+        if (showLanjut) {
             Spacer(modifier = Modifier.height(16.dp))
             LanjutButton(
                 onClick  = onNavigateNext,
@@ -553,6 +562,162 @@ private fun CardContainer(
             .padding(14.dp)
     ) {
         Column(content = content)
+    }
+}
+
+// ════════════════════════════════════════════════════════════
+//  FUNGSI BARU: FormAkunBaruCard
+// ════════════════════════════════════════════════════════════
+
+@Composable
+fun FormAkunBaruCard(modifier: Modifier = Modifier) {
+
+    // ── State ──────────────────────────────────────────────
+    var namaOrtu    by remember { mutableStateOf("") }
+    var username    by remember { mutableStateOf("") }
+    var noHp        by remember { mutableStateOf("") }
+    var password    by remember { mutableStateOf("") }
+    // ───────────────────────────────────────────────────────
+
+    // Local tokens
+    val fieldBg         = Color(0xFF3A3A3A)
+    val fieldBorder     = Color(0xFF555555)
+    val labelColor      = Color(0xFFAAAAAA)
+    val infoBoxBg       = Color(0xFFBBCFEF)   // soft blue
+    val infoBoxText     = Color(0xFF1A3A6E)   // navy
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xFF2A2A2A))
+            .border(1.dp, Color(0xFF444444), RoundedCornerShape(16.dp))
+            .padding(16.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+
+            // Card title
+            Text(
+                text       = "Buat akun orang tua baru",
+                color      = TextWhite,
+                fontSize   = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            // Field 1: Nama Orang Tua
+            AkunBaruInputField(
+                label         = "Nama Orang Tua",
+                value         = namaOrtu,
+                onValueChange = { namaOrtu = it },
+                placeholder   = "Nama Orang Tua",
+                fieldBg       = fieldBg,
+                fieldBorder   = fieldBorder,
+                labelColor    = labelColor
+            )
+
+            // Field 2: Username Orang Tua
+            AkunBaruInputField(
+                label         = "Username Orang Tua",
+                value         = username,
+                onValueChange = { username = it },
+                placeholder   = "Untuk login orang tua",
+                fieldBg       = fieldBg,
+                fieldBorder   = fieldBorder,
+                labelColor    = labelColor
+            )
+
+            // Field 3: No. HP
+            AkunBaruInputField(
+                label         = "No. HP",
+                value         = noHp,
+                onValueChange = { noHp = it },
+                placeholder   = "No. Hp Orang Tua",
+                fieldBg       = fieldBg,
+                fieldBorder   = fieldBorder,
+                labelColor    = labelColor,
+                keyboardType  = KeyboardType.Phone
+            )
+
+            // Field 4: Password Sementara
+            AkunBaruInputField(
+                label         = "Passwod Sementara",
+                value         = password,
+                onValueChange = { password = it },
+                placeholder   = "Min. 6 karakter",
+                fieldBg       = fieldBg,
+                fieldBorder   = fieldBorder,
+                labelColor    = labelColor,
+                keyboardType  = KeyboardType.Password,
+                isPassword    = true
+            )
+
+            // Info box biru
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(infoBoxBg)
+                    .padding(12.dp)
+            ) {
+                Text(
+                    text       = "Bagikan username & password ini ke orang tua anak. Mereka bisa ganti password setelah login pertama.",
+                    color      = infoBoxText,
+                    fontSize   = 13.sp,
+                    lineHeight = 20.sp
+                )
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Reusable input field untuk form akun baru
+//  (private, hanya dipakai di dalam FormAkunBaruCard)
+// ─────────────────────────────────────────────────────────────
+
+@Composable
+private fun AkunBaruInputField(
+    label        : String,
+    value        : String,
+    onValueChange: (String) -> Unit,
+    placeholder  : String,
+    fieldBg      : Color,
+    fieldBorder  : Color,
+    labelColor   : Color,
+    keyboardType : KeyboardType = KeyboardType.Text,
+    isPassword   : Boolean      = false,
+    modifier     : Modifier     = Modifier
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(text = label, color = labelColor, fontSize = 12.sp)
+
+        OutlinedTextField(
+            value         = value,
+            onValueChange = onValueChange,
+            modifier      = Modifier
+                .fillMaxWidth()
+                .height(50.dp),
+            placeholder   = {
+                Text(text = placeholder, color = Color(0xFF6B6B6B), fontSize = 14.sp)
+            },
+            singleLine             = true,
+            textStyle              = TextStyle(color = TextWhite, fontSize = 14.sp),
+            keyboardOptions        = KeyboardOptions(keyboardType = keyboardType),
+            visualTransformation   = if (isPassword) PasswordVisualTransformation()
+                                     else VisualTransformation.None,
+            shape  = RoundedCornerShape(8.dp),
+            colors = TextFieldDefaults.outlinedTextFieldColors(
+                textColor            = TextWhite,
+                cursorColor          = AccentGreen,
+                focusedBorderColor   = AccentGreen,
+                unfocusedBorderColor = fieldBorder,
+                backgroundColor      = fieldBg,
+                placeholderColor     = Color(0xFF6B6B6B)
+            )
+        )
     }
 }
 

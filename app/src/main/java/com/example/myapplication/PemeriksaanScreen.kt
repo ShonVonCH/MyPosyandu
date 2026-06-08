@@ -5,9 +5,11 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Icon
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
@@ -23,6 +25,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -60,7 +63,6 @@ fun PemeriksaanScreen(
     ) {
         // ①  Header baru — profil anak
         HeaderProfilAnak(
-            namaAnak       = namaAnak,
             onNavigateBack = onNavigateBack
         )
 
@@ -70,42 +72,80 @@ fun PemeriksaanScreen(
             onTabSelected = { activeTab = it }
         )
 
-        // ③  Form tetap di sini
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(bottom = 24.dp)
-        ) {
-            item { Spacer(modifier = Modifier.height(16.dp)) }
+        // ③  Konten berdasarkan tab
+        Box(modifier = Modifier.weight(1f)) {
+            when (activeTab) {
+                // ── Tab 0: Input ────────────────────────────────────────
+                0 -> {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 24.dp)
+                    ) {
+                        item { Spacer(modifier = Modifier.height(16.dp)) }
 
-            item {
-                AntropometriCard(
-                    beratBadan      = beratBadan,
-                    onBeratChange   = { beratBadan = it },
-                    tinggiBadan     = tinggiBadan,
-                    onTinggiChange  = { tinggiBadan = it },
-                    lingkarKepala   = lingkarKepala,
-                    onKepalaChange  = { lingkarKepala = it },
-                    lingkarLengan   = lingkarLengan,
-                    onLenganChange  = { lingkarLengan = it },
-                    modifier        = Modifier.padding(horizontal = 16.dp)
-                )
+                        item {
+                            AntropometriCard(
+                                beratBadan      = beratBadan,
+                                onBeratChange   = { beratBadan = it },
+                                tinggiBadan     = tinggiBadan,
+                                onTinggiChange  = { tinggiBadan = it },
+                                lingkarKepala   = lingkarKepala,
+                                onKepalaChange  = { lingkarKepala = it },
+                                lingkarLengan   = lingkarLengan,
+                                onLenganChange  = { lingkarLengan = it },
+                                modifier        = Modifier.padding(horizontal = 16.dp)
+                            )
+                        }
+                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                        item {
+                            TanggalCard(
+                                tanggal         = tanggal,
+                                onTanggalChange = { tanggal = it },
+                                modifier        = Modifier.padding(horizontal = 16.dp)
+                            )
+                        }
+                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                        item {
+                            AnalisisDanSimpanButton(
+                                onClick  = onNavigateToHasil,
+                                modifier = Modifier.padding(horizontal = 16.dp)
+                            )
+                        }
+                        item { Spacer(modifier = Modifier.height(32.dp)) }
+                    }
+                }
+
+                // ── Tab 1: Hasil ────────────────────────────────────────
+                1 -> {
+                    // TODO: Tampilkan ringkasan hasil di sini jika diperlukan
+                }
+
+                // ── Tab 2: Grafik TB/U ───────────────────────────────────
+                2 -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        GrafikTBUContent(modifier = Modifier.padding(horizontal = 16.dp))
+                        Spacer(modifier = Modifier.height(32.dp))
+                    }
+                }
+
+                // ── Tab 3: Grafik BB/U ───────────────────────────────────
+                3 -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        GrafikBBUContent(modifier = Modifier.padding(horizontal = 16.dp))
+                        Spacer(modifier = Modifier.height(32.dp))
+                    }
+                }
             }
-            item { Spacer(modifier = Modifier.height(16.dp)) }
-            item {
-                TanggalCard(
-                    tanggal         = tanggal,
-                    onTanggalChange = { tanggal = it },
-                    modifier        = Modifier.padding(horizontal = 16.dp)
-                )
-            }
-            item { Spacer(modifier = Modifier.height(16.dp)) }
-            item {
-                AnalisisDanSimpanButton(
-                    onClick  = onNavigateToHasil,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-            }
-            item { Spacer(modifier = Modifier.height(32.dp)) }
         }
     }
 }
@@ -116,7 +156,6 @@ fun PemeriksaanScreen(
 
 @Composable
 fun HeaderProfilAnak(
-    namaAnak      : String = "Michael Kwok",
     subTitle      : String = "Michael Kwok36 Bulan ~ Laki-Laki",
     halamanJudul  : String = "Pemeriksaan",
     onNavigateBack: () -> Unit = {}
@@ -146,7 +185,7 @@ fun HeaderProfilAnak(
                     modifier           = Modifier.size(16.dp)
                 )
                 Text(
-                    text     = namaAnak,
+                    text     = "Kembali",
                     color    = TextWhite,
                     fontSize = 13.sp
                 )
@@ -444,6 +483,82 @@ fun PemeriksaanInputBox(
             }
         }
     )
+}
+
+// ════════════════════════════════════════════════════════════
+//  TAB 2: Grafik TB/U
+// ════════════════════════════════════════════════════════════
+
+@Composable
+fun GrafikTBUContent(modifier: Modifier = Modifier) {
+    Column(
+        modifier            = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        // Card utama — area grafik
+        GrafikCardContainer(height = 380.dp) {
+            Text(
+                text       = "Tinggi Badan / Usia (TB/U)",
+                color      = TextWhite,
+                fontSize   = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
+            // TODO: Pasang komponen grafik (mis. MPAndroidChart / Vico) di sini
+        }
+
+        // Card bawah — area legend / keterangan
+        GrafikCardContainer(height = 90.dp) {
+            // TODO: Tambahkan legend warna & label di sini
+        }
+    }
+}
+
+// ════════════════════════════════════════════════════════════
+//  TAB 3: Grafik BB/U  (placeholder identik, judul berbeda)
+// ════════════════════════════════════════════════════════════
+
+@Composable
+fun GrafikBBUContent(modifier: Modifier = Modifier) {
+    Column(
+        modifier            = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        GrafikCardContainer(height = 380.dp) {
+            Text(
+                text       = "Berat Badan / Usia (BB/U)",
+                color      = TextWhite,
+                fontSize   = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
+            // TODO: Pasang komponen grafik BB/U di sini
+        }
+
+        GrafikCardContainer(height = 90.dp) {
+            // TODO: Tambahkan legend warna & label di sini
+        }
+    }
+}
+
+// ════════════════════════════════════════════════════════════
+//  REUSABLE: Card container untuk grafik
+// ════════════════════════════════════════════════════════════
+
+@Composable
+private fun GrafikCardContainer(
+    height  : Dp,
+    content : @Composable ColumnScope.() -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(height)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xFF2A2A2A))
+            .border(1.dp, Color(0xFF444444), RoundedCornerShape(16.dp))
+            .padding(14.dp)
+    ) {
+        Column(content = content)
+    }
 }
 
 // ════════════════════════════════════════════════════════════
