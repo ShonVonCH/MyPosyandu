@@ -39,7 +39,13 @@ fun AppNavigation() {
 
         composable("login") {
             LoginScreen(
-                onNavigateToDashboard = { navController.navigate("dashboard") }
+                onNavigateToDashboard = { role ->
+                    if (role == "kader") {
+                        navController.navigate("dashboard")
+                    } else {
+                        navController.navigate("dashboard_orangtua")
+                    }
+                }
             )
         }
         composable("dashboard") {
@@ -47,6 +53,13 @@ fun AppNavigation() {
                 onNavigateToPemeriksaan = { navController.navigate("pemeriksaan") },
                 onNavigateToDataAnak = { navController.navigate("data_anak") },
                 onNavigateToImunisasi = { navController.navigate("imunisasi") }
+            )
+        }
+        composable("dashboard_orangtua") {
+            DashboardOrangTuaScreen(
+                onNavigateToDetailAnak = { namaAnak ->
+                    navController.navigate("riwayat/$namaAnak")
+                }
             )
         }
         composable("pemeriksaan") {
@@ -81,8 +94,22 @@ fun AppNavigation() {
         composable("hubung_orang_tua") {
             HubungOrangTuaScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateNext = {
-                    // Navigate back to dashboard or success screen
+                onNavigateNext = { navController.navigate("konfirmasi_data") }
+            )
+        }
+        composable("konfirmasi_data") {
+            KonfirmasiDataScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onSimpanClicked = { navController.navigate("sukses_daftar") },
+                onPerbaikiClicked = {
+                    navController.popBackStack("daftar_anak_baru", inclusive = false)
+                }
+            )
+        }
+        composable("sukses_daftar") {
+            SuksesDaftarScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onSelesaiClicked = {
                     navController.navigate("dashboard") {
                         popUpTo("dashboard") { inclusive = true }
                     }

@@ -37,7 +37,6 @@ private val RoleSelectedText = Color(0xFF1E6B4E)   // dark green – active role
 private val RoleIdleText     = TextWhite
 private val InputOutline     = Color(0xFF555555)
 private val InputLabelColor  = Color(0xFFAAAAAA)
-private val PageTitleColor   = Color(0xFF666666)
 private val KaderIconTeal    = Color(0xFF3DB89C)   // teal icon on Kader card
 private val OrangTuaIconBlue = Color(0xFF4A90D9)   // blue icon on Orang Tua card
 private val LogoBoxBg        = Color(0xFF7ECFB0)   // mint rounded-square logo bg
@@ -47,7 +46,7 @@ private val LogoBoxBg        = Color(0xFF7ECFB0)   // mint rounded-square logo b
 // ════════════════════════════════════════════════════════════
 
 @Composable
-fun LoginScreen(onNavigateToDashboard: () -> Unit = {}) {
+fun LoginScreen(onNavigateToDashboard: (String) -> Unit = {}) {
 
     // ── State ────────────────────────────────────────────────
     var selectedRole by remember { mutableStateOf("kader") }
@@ -61,15 +60,6 @@ fun LoginScreen(onNavigateToDashboard: () -> Unit = {}) {
             .background(BackgroundDark)
             .verticalScroll(rememberScrollState())
     ) {
-        // "Login Page" micro-label at very top
-        Text(
-            text      = "Login Page",
-            color     = PageTitleColor,
-            fontSize  = 11.sp,
-            modifier  = Modifier
-                .padding(start = 16.dp, top = 12.dp, bottom = 4.dp)
-        )
-
         // ── Logo / branding block ────────────────────────────
         LoginHeader()
 
@@ -97,7 +87,7 @@ fun LoginScreen(onNavigateToDashboard: () -> Unit = {}) {
 
         // ── CTA button ────────────────────────────────────────
         LoginButton(
-            onClick  = onNavigateToDashboard,
+            onClick  = { onNavigateToDashboard(selectedRole) },
             modifier = Modifier.padding(horizontal = 20.dp)
         )
 
@@ -115,16 +105,6 @@ fun LoginHeader() {
         modifier            = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Thin green strip — standalone, no overlap
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp)
-                .background(HeaderGreen)
-        )
-
-        Spacer(modifier = Modifier.height(32.dp))
-
         // Rounded-square mint logo box with stethoscope icon
         Box(
             modifier = Modifier
