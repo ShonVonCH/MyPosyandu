@@ -96,7 +96,75 @@ fun AppNavigation() {
         composable("dashboard_orangtua") {
             DashboardOrangTuaScreen(
                 onNavigateToDetailAnak = { namaAnak ->
-                    safeNavigate { navController.navigate("riwayat/$namaAnak") { launchSingleTop = true } }
+                    safeNavigate { navController.navigate("detail_anak_ringkasan/$namaAnak") { launchSingleTop = true } }
+                },
+                onNavigateToTicket = { safeNavigate { navController.navigate("antrian_ortu") { launchSingleTop = true } } }
+            )
+        }
+
+        composable("antrian_ortu") {
+            AntrianOrtuScreen(
+                onNavigateToHome = { safeNavigate { navController.navigate("dashboard_orangtua") { launchSingleTop = true } } },
+                onNavigateToTicket = { safeNavigate { navController.navigate("tiket_antrian") { launchSingleTop = true } } }
+            )
+        }
+
+        composable("tiket_antrian") {
+            TiketAntrianScreen(
+                onNavigateToHome = { safeNavigate { navController.navigate("dashboard_orangtua") { launchSingleTop = true } } },
+                onNavigateToTicket = { /* Sudah di Tiket */ },
+                onNavigateToFood = { /* TODO */ },
+                onNavigateToProfile = { /* TODO */ }
+            )
+        }
+
+        composable(
+            route = "detail_anak_ringkasan/{namaAnak}",
+            arguments = listOf(navArgument("namaAnak") { type = NavType.StringType })
+        ) { backStack ->
+            val namaAnak = backStack.arguments?.getString("namaAnak") ?: ""
+            DetailAnakRingkasanScreen(
+                namaAnak = namaAnak,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToPemeriksaan = {
+                    safeNavigate { navController.navigate("pemeriksaan_ortu/$namaAnak") { launchSingleTop = true } }
+                },
+                onNavigateToVaksin = {
+                    safeNavigate { navController.navigate("vaksin_ortu/$namaAnak") { launchSingleTop = true } }
+                }
+            )
+        }
+
+        composable(
+            route = "pemeriksaan_ortu/{namaAnak}",
+            arguments = listOf(navArgument("namaAnak") { type = NavType.StringType })
+        ) { backStack ->
+            val namaAnak = backStack.arguments?.getString("namaAnak") ?: ""
+            PemeriksaanOrtuScreen(
+                namaAnak = namaAnak,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToRingkasan = {
+                    navController.popBackStack("detail_anak_ringkasan/$namaAnak", inclusive = false)
+                },
+                onNavigateToVaksin = {
+                    safeNavigate { navController.navigate("vaksin_ortu/$namaAnak") { launchSingleTop = true } }
+                }
+            )
+        }
+
+        composable(
+            route = "vaksin_ortu/{namaAnak}",
+            arguments = listOf(navArgument("namaAnak") { type = NavType.StringType })
+        ) { backStack ->
+            val namaAnak = backStack.arguments?.getString("namaAnak") ?: ""
+            VaksinOrtuScreen(
+                namaAnak = namaAnak,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToRingkasan = {
+                    navController.popBackStack("detail_anak_ringkasan/$namaAnak", inclusive = false)
+                },
+                onNavigateToPemeriksaan = {
+                    navController.popBackStack("pemeriksaan_ortu/$namaAnak", inclusive = false)
                 }
             )
         }
