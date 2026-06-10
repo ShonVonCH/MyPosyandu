@@ -20,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -27,51 +28,112 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 
-// ════════════════════════════════════════════════════════════
-//  DATA MODEL
-// ════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────
+// Model
+// ─────────────────────────────────────────────
 
 data class AnakData(
-    val nama       : String,
-    val status     : String,
-    val tinggiBadan: Int,
-    val beratBadan : Int,
-    val umurBulan  : Int,
-    val tanggal    : String
+    val nama         : String,
+    val status       : String,
+    val tinggiBadan  : Int,      // nilai awal dari data dummy; bisa di-override oleh AnakViewModel
+    val beratBadan   : Int,      // sama ↑
+    val umurBulan    : Int,
+    val tanggal      : String,
+    val namaOrangTua : String = "-",
+    val jenisKelamin : String = "-"   // "L" atau "P"
 )
 
-// ════════════════════════════════════════════════════════════
-//  SAMPLE DATA
-// ════════════════════════════════════════════════════════════
-
-private val dummyAnakList = List(6) {
-    AnakData(
-        nama        = "Michael Kwok",
-        status      = "Gizi Kurang",
-        tinggiBadan = 100,
-        beratBadan  = 40,
-        umurBulan   = 36,
-        tanggal     = "Apr 2025"
-    )
+/**
+ * Hitung umur dalam bulan dari tanggal lahir (format "dd/MM/yyyy") ke hari ini.
+ * Kembalikan 0 kalau format tidak dikenali.
+ */
+fun hitungUmurBulan(tanggalLahir: String): Int {
+    return try {
+        val formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy")
+        val lahir     = LocalDate.parse(tanggalLahir, formatter)
+        val sekarang  = LocalDate.now()
+        ChronoUnit.MONTHS.between(lahir, sekarang).toInt().coerceAtLeast(0)
+    } catch (e: Exception) {
+        0
+    }
 }
 
-// ════════════════════════════════════════════════════════════
-//  SCREEN ENTRY POINT
-// ════════════════════════════════════════════════════════════
+/**
+ * Format tanggal "dd/MM/yyyy" → "MMM yyyy", misal "16/01/2026" → "Jan 2026".
+ * Kembalikan string asli kalau format tidak dikenali.
+ */
+fun formatTanggalSingkat(tanggalLahir: String): String {
+    return try {
+        val input  = DateTimeFormatter.ofPattern("dd/MM/yyyy")
+        val output = DateTimeFormatter.ofPattern("MMM yyyy")
+        LocalDate.parse(tanggalLahir, input).format(output)
+    } catch (e: Exception) {
+        tanggalLahir
+    }
+}
+
+// ─────────────────────────────────────────────
+// Dummy data — P/L hardcode, umur hardcode
+// ─────────────────────────────────────────────
+
+private val dummyAnakList = listOf(
+    AnakData(nama = "Michael Kwok",  status = "Gizi Kurang", tinggiBadan = 85, beratBadan = 11, umurBulan = 36, tanggal = "Apr 2025", namaOrangTua = "Bapak Kwok",    jenisKelamin = "L"),
+    AnakData(nama = "Siti Rahayu",   status = "Normal",      tinggiBadan = 78, beratBadan = 9,  umurBulan = 24, tanggal = "Mar 2025", namaOrangTua = "Ibu Rahayu",    jenisKelamin = "P"),
+    AnakData(nama = "Budi Santoso",  status = "Stunting",    tinggiBadan = 70, beratBadan = 8,  umurBulan = 30, tanggal = "Feb 2025", namaOrangTua = "Bapak Santoso", jenisKelamin = "L"),
+    AnakData(nama = "Dewi Permata",  status = "Normal",      tinggiBadan = 90, beratBadan = 13, umurBulan = 42, tanggal = "Apr 2025", namaOrangTua = "Ibu Permata",   jenisKelamin = "P"),
+    AnakData(nama = "Rizky Pratama", status = "Gizi Buruk",  tinggiBadan = 65, beratBadan = 7,  umurBulan = 18, tanggal = "Jan 2025", namaOrangTua = "Bapak Pratama", jenisKelamin = "L"),
+    AnakData(nama = "Aulia Safitri", status = "Normal",      tinggiBadan = 95, beratBadan = 14, umurBulan = 48, tanggal = "Mar 2025", namaOrangTua = "Ibu Safitri",   jenisKelamin = "P")
+)
+
+// ─────────────────────────────────────────────
+// Screen
+// ─────────────────────────────────────────────
 
 @Composable
 fun DataAnakScreen(
-    anakList: List<AnakData> = dummyAnakList,
-    onTambahClick: () -> Unit = {},
-    onAnakClick: (AnakData) -> Unit = {},
-    onNavigateBack: () -> Unit = {}
+    anakList      : List<AnakData>     = dummyAnakList,
+    viewModel     : FormDataViewModel? = null,
+    anakViewModel : AnakViewModel?     = null,   // ← untuk baca TB/BB terkini
+    onTambahClick : () -> Unit         = {},
+    onAnakClick   : (AnakData) -> Unit = {},
+    onNavigateBack: () -> Unit         = {}
 ) {
+    // Gabungkan dummy list + anak baru dari viewModel
+    val allAnakList = remember(viewModel?.registeredAnakList?.size) {
+        val tambahan = viewModel?.registeredAnakList?.map { entry ->
+            val umur = hitungUmurBulan(entry.formAnak.tanggalLahir)
+            AnakData(
+                nama         = entry.formAnak.namaLengkap,
+                status       = "Baru Terdaftar",
+                tinggiBadan  = 0,
+                beratBadan   = 0,
+                umurBulan    = umur,
+                tanggal      = formatTanggalSingkat(entry.formAnak.tanggalLahir),
+                namaOrangTua = entry.namaOrangTua.ifBlank { "-" },
+                jenisKelamin = when (entry.formAnak.jenisKelamin.trim().lowercase()) {
+                    "laki-laki", "l" -> "L"
+                    "perempuan", "p" -> "P"
+                    else             -> entry.formAnak.jenisKelamin.ifBlank { "-" }
+                }
+            )
+        } ?: emptyList()
+        anakList + tambahan
+    }
+
+    // Observasi map hasil pemeriksaan dari AnakViewModel agar list auto-refresh
+    val hasilPemeriksaan by (anakViewModel?.hasilPemeriksaan
+        ?: kotlinx.coroutines.flow.MutableStateFlow(emptyMap())
+            ).collectAsState()
+
     var searchQuery by remember { mutableStateOf("") }
 
-    val filteredList = remember(searchQuery, anakList) {
-        if (searchQuery.isBlank()) anakList
-        else anakList.filter { it.nama.contains(searchQuery, ignoreCase = true) }
+    val filteredList = remember(searchQuery, allAnakList) {
+        if (searchQuery.isBlank()) allAnakList
+        else allAnakList.filter { it.nama.contains(searchQuery, ignoreCase = true) }
     }
 
     Column(
@@ -79,13 +141,11 @@ fun DataAnakScreen(
             .fillMaxSize()
             .background(BackgroundDark)
     ) {
-        // ── Header (fixed at top, not scrollable) ──────────
         DataAnakHeader(
-            jumlahAnak = anakList.size,
-            onBack = onNavigateBack
+            jumlahAnak = allAnakList.size,
+            onBack     = onNavigateBack
         )
 
-        // ── Scrollable body ────────────────────────────────
         LazyColumn(
             modifier = Modifier
                 .weight(1f)
@@ -94,16 +154,22 @@ fun DataAnakScreen(
             item {
                 Spacer(modifier = Modifier.height(20.dp))
                 SearchBarSection(
-                    query       = searchQuery,
+                    query         = searchQuery,
                     onQueryChange = { searchQuery = it },
-                    modifier    = Modifier.padding(horizontal = 16.dp)
+                    modifier      = Modifier.padding(horizontal = 16.dp)
                 )
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
             items(filteredList) { anak ->
+                // Override TB/BB dari hasil pemeriksaan terbaru (kalau ada)
+                val bbTerkini = hasilPemeriksaan[anak.nama]?.first
+                val tbTerkini = hasilPemeriksaan[anak.nama]?.second
+                val tampilBB  = if (!bbTerkini.isNullOrBlank()) bbTerkini.toDoubleOrNull()?.toInt() ?: anak.beratBadan else anak.beratBadan
+                val tampilTB  = if (!tbTerkini.isNullOrBlank()) tbTerkini.toDoubleOrNull()?.toInt() ?: anak.tinggiBadan else anak.tinggiBadan
+
                 AnakListItem(
-                    data    = anak,
+                    data    = anak.copy(beratBadan = tampilBB, tinggiBadan = tampilTB),
                     onClick = { onAnakClick(anak) }
                 )
             }
@@ -111,17 +177,20 @@ fun DataAnakScreen(
             item { Spacer(modifier = Modifier.height(16.dp)) }
         }
 
-        // ── Bottom button (always visible) ─────────────────
         TambahAnakButton(
             onClick  = onTambahClick,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .padding(top = 12.dp)
+                .navigationBarsPadding()
+                .padding(bottom = 12.dp)
         )
     }
 }
 
-// ════════════════════════════════════════════════════════════
-//  1. HEADER
-// ════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────
+// Header
+// ─────────────────────────────────────────────
 
 @Composable
 fun DataAnakHeader(jumlahAnak: Int, onBack: () -> Unit) {
@@ -129,33 +198,33 @@ fun DataAnakHeader(jumlahAnak: Int, onBack: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .background(HeaderGreen)
-            .padding(start = 20.dp, end = 20.dp, top = 40.dp, bottom = 24.dp)
+            .statusBarsPadding()
+            .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 24.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            // App bar title with Back Icon
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier          = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = Icons.Default.ArrowBack,
+                    imageVector        = Icons.Default.ArrowBack,
                     contentDescription = "Back",
-                    tint = TextWhite,
-                    modifier = Modifier
+                    tint               = TextWhite,
+                    modifier           = Modifier
                         .size(24.dp)
                         .clickable { onBack() }
                 )
                 Text(
-                    text = "MyPosyandu",
-                    color = TextWhite,
-                    fontSize = 18.sp,
+                    text       = "MyPosyandu",
+                    color      = TextWhite,
+                    fontSize   = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f),
-                    textAlign = TextAlign.Center
+                    modifier   = Modifier.weight(1f),
+                    textAlign  = TextAlign.Center
                 )
-                Spacer(modifier = Modifier.width(24.dp)) // To balance the back icon
+                Spacer(modifier = Modifier.width(24.dp))
             }
-            
+
             Spacer(modifier = Modifier.height(20.dp))
             Text(
                 text       = "Data Anak",
@@ -174,9 +243,9 @@ fun DataAnakHeader(jumlahAnak: Int, onBack: () -> Unit) {
     }
 }
 
-// ════════════════════════════════════════════════════════════
-//  2. SEARCH BAR
-// ════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────
+// Search Bar
+// ─────────────────────────────────────────────
 
 @Composable
 fun SearchBarSection(
@@ -200,7 +269,7 @@ fun SearchBarSection(
             .padding(horizontal = 14.dp, vertical = 14.dp),
         decorationBox = { innerTextField ->
             Row(
-                verticalAlignment = Alignment.CenterVertically,
+                verticalAlignment     = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Icon(
@@ -224,15 +293,21 @@ fun SearchBarSection(
     )
 }
 
-// ════════════════════════════════════════════════════════════
-//  3. LIST ITEM
-// ════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────
+// List Item
+// ─────────────────────────────────────────────
 
 @Composable
 fun AnakListItem(
     data   : AnakData,
     onClick: () -> Unit = {}
 ) {
+    val (badgeBg, badgeTextColor) = when (data.jenisKelamin) {
+        "L"  -> Color(0xFF1A3A5C) to Color(0xFF7EC8F0)
+        "P"  -> Color(0xFF4A1A3C) to Color(0xFFF07EC8)
+        else -> Color(0xFF2A2A2A) to TextGrey
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -241,10 +316,9 @@ fun AnakListItem(
             .padding(horizontal = 16.dp, vertical = 14.dp)
     ) {
         Row(
-            verticalAlignment    = Alignment.CenterVertically,
+            verticalAlignment     = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Avatar circle
             Box(
                 modifier = Modifier
                     .size(48.dp)
@@ -252,29 +326,50 @@ fun AnakListItem(
                     .background(CircleMint)
             )
 
-            // Name + stats (takes remaining space)
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text       = data.nama,
-                    color      = TextWhite,
-                    fontSize   = 15.sp,
-                    fontWeight = FontWeight.Bold
-                )
+
+                // Nama + badge gender
+                Row(
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text       = data.nama,
+                        color      = TextWhite,
+                        fontSize   = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (data.jenisKelamin != "-") {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(badgeBg)
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text       = data.jenisKelamin,
+                                color      = badgeTextColor,
+                                fontSize   = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(text = data.status, color = TextGrey, fontSize = 13.sp)
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text     = data.status,
-                    color    = TextGrey,
-                    fontSize = 13.sp
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text     = "TB: ${data.tinggiBadan}  BB: ${data.beratBadan}  Umur: ${data.umurBulan} Bulan",
+                    text     = "TB: ${if (data.tinggiBadan > 0) "${data.tinggiBadan} cm" else "–"}  " +
+                            "BB: ${if (data.beratBadan  > 0) "${data.beratBadan} kg"  else "–"}  " +
+                            "Umur: ${data.umurBulan} bln",
                     color    = TextGrey,
                     fontSize = 12.sp
                 )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(text = "Ortu: ${data.namaOrangTua}", color = TextGrey, fontSize = 12.sp)
             }
 
-            // Date — pinned to bottom-right via Arrangement
             Text(
                 text     = data.tanggal,
                 color    = TextGrey,
@@ -284,15 +379,12 @@ fun AnakListItem(
         }
     }
 
-    Divider(
-        color     = SurfaceDarkBorder,
-        thickness = 0.8.dp
-    )
+    Divider(color = SurfaceDarkBorder, thickness = 0.8.dp)
 }
 
-// ════════════════════════════════════════════════════════════
-//  4. TAMBAH ANAK BUTTON
-// ════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────
+// Tombol Tambah
+// ─────────────────────────────────────────────
 
 @Composable
 fun TambahAnakButton(
@@ -304,11 +396,7 @@ fun TambahAnakButton(
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .background(BackgroundDark)
-            .border(
-                width  = 1.dp,
-                color  = TextWhite,
-                shape  = RoundedCornerShape(14.dp)
-            )
+            .border(1.dp, TextWhite, RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
             .padding(vertical = 16.dp),
         contentAlignment = Alignment.Center
@@ -333,9 +421,9 @@ fun TambahAnakButton(
     }
 }
 
-// ════════════════════════════════════════════════════════════
-//  PREVIEW
-// ════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────
+// Preview
+// ─────────────────────────────────────────────
 
 @Preview(showBackground = true, showSystemUi = true, backgroundColor = 0xFF121212)
 @Composable

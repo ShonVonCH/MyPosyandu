@@ -29,59 +29,47 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// ─────────────────────────────────────────────────────────────
-//  Local design tokens
-// ─────────────────────────────────────────────────────────────
-private val CardBg              = Color(0xFF2A2A2A)
-private val CardBorder          = Color(0xFF444444)
-private val OptionBorder        = Color(0xFF555555)
-private val SearchBg            = Color(0xFF1A1A1A)
-private val AvatarGrey          = Color(0xFF6B6B6B)
-private val ConfirmCardBg       = Color(0xFFB8EDD8)   // mint green
-private val ConfirmInfoBoxBg    = Color(0xFF8FDDBC)   // slightly darker mint
-private val ConfirmTextDark     = Color(0xFF1E6B4E)
-private val RadioActiveColor    = Color(0xFF2E9B6E)   // filled green circle
-private val SubtextColor        = Color(0xFFAAAAAA)
-private val PageLabelColor      = Color(0xFF666666)
-
-// ─────────────────────────────────────────────────────────────
-//  Data model
-// ─────────────────────────────────────────────────────────────
-
-data class OrangTuaAccount(
-    val nama       : String,
-    val username   : String,
-    val jumlahAnak : Int
-)
-
-private val dummyAccounts = listOf(
-    OrangTuaAccount("Rina Susanti",  "@ortu_rina",  3),
-    OrangTuaAccount("Sri Wahyuni",   "@ortu_sri",   3),
-    OrangTuaAccount("Dewi Lestari",  "@ortu_dewi",  3)
-)
-
-// ════════════════════════════════════════════════════════════
-//  SCREEN ENTRY POINT
-// ════════════════════════════════════════════════════════════
+private val CardBg           = Color(0xFF2A2A2A)
+private val CardBorder       = Color(0xFF444444)
+private val OptionBorder     = Color(0xFF555555)
+private val SearchBg         = Color(0xFF1A1A1A)
+private val AvatarGrey       = Color(0xFF6B6B6B)
+private val ConfirmCardBg    = Color(0xFFB8EDD8)
+private val ConfirmInfoBoxBg = Color(0xFF8FDDBC)
+private val ConfirmTextDark  = Color(0xFF1E6B4E)
+private val RadioActiveColor = Color(0xFF2E9B6E)
+private val SubtextColor     = Color(0xFFAAAAAA)
+private val PageLabelColor   = Color(0xFF666666)
 
 @Composable
 fun HubungOrangTuaScreen(
+    viewModel     : FormDataViewModel = FormDataViewModel(),
     onNavigateBack: () -> Unit = {},
     onNavigateNext: () -> Unit = {}
 ) {
-    // ── State ────────────────────────────────────────────────
-    var selectedMethod  by remember { mutableStateOf("existing") }  // "existing" | "new"
+    var selectedMethod  by remember { mutableStateOf("existing") }
     var searchQuery     by remember { mutableStateOf("") }
     var selectedAccount by remember { mutableStateOf<OrangTuaAccount?>(null) }
-    // ────────────────────────────────────────────────────────
+
+    var namaOrtu by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf("") }
+    var noHp     by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+
+    val formBaruValid = namaOrtu.isNotBlank() && username.isNotBlank() &&
+            noHp.isNotBlank() && password.isNotBlank()
+
+    val showLanjut = if (selectedMethod == "existing") selectedAccount != null
+    else formBaruValid
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(BackgroundDark)
+            .statusBarsPadding()
+            .navigationBarsPadding()
             .verticalScroll(rememberScrollState())
     ) {
-        // Micro page-label
         Text(
             text     = "Hubungkan Ke Ortu",
             color    = PageLabelColor,
@@ -89,43 +77,60 @@ fun HubungOrangTuaScreen(
             modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp)
         )
 
-        // Header
         HubungHeader(onNavigateBack = onNavigateBack)
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Card 1: Pilih cara hubungkan
         PilihCaraCard(
             selectedMethod = selectedMethod,
-            onMethodSelect = { selectedMethod = it },
-            modifier       = Modifier.padding(horizontal = 16.dp)
+            onMethodSelect = {
+                selectedMethod  = it
+                selectedAccount = null
+            },
+            modifier = Modifier.padding(horizontal = 16.dp)
         )
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Card 2: Cari akun orang tua atau Buat akun baru
         if (selectedMethod == "existing") {
             CariAkunCard(
+                akunList        = viewModel.akunOrangTuaList,
                 searchQuery     = searchQuery,
                 onSearchChange  = { searchQuery = it },
                 selectedAccount = selectedAccount,
-                onSelectAccount = { selectedAccount = it },
+                onSelectAccount = {
+                    selectedAccount = it
+                    viewModel.formOrangTua = FormOrangTuaData(
+                        nama     = it.nama,
+                        username = it.username
+                    )
+                },
                 onClearAccount  = { selectedAccount = null },
                 modifier        = Modifier.padding(horizontal = 16.dp)
             )
         } else {
             FormAkunBaruCard(
-                modifier = Modifier.padding(horizontal = 16.dp)
+                namaOrtu      = namaOrtu,
+                onNamaChange  = { namaOrtu = it },
+                username      = username,
+                onUserChange  = { username = it },
+                noHp          = noHp,
+                onHpChange    = { noHp = it },
+                password      = password,
+                onPassChange  = { password = it },
+                modifier      = Modifier.padding(horizontal = 16.dp)
             )
         }
-
-        // Bottom CTA
-        val showLanjut = if (selectedMethod == "existing") selectedAccount != null else true
 
         if (showLanjut) {
             Spacer(modifier = Modifier.height(16.dp))
             LanjutButton(
-                onClick  = onNavigateNext,
+                onClick = {
+                    if (selectedMethod == "new") {
+                        viewModel.tambahAkunOrangTua(namaOrtu, username, noHp, password)
+                    }
+                    onNavigateNext()
+                },
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
         }
@@ -133,10 +138,6 @@ fun HubungOrangTuaScreen(
         Spacer(modifier = Modifier.height(40.dp))
     }
 }
-
-// ════════════════════════════════════════════════════════════
-//  1. HEADER
-// ════════════════════════════════════════════════════════════
 
 @Composable
 fun HubungHeader(onNavigateBack: () -> Unit) {
@@ -147,8 +148,6 @@ fun HubungHeader(onNavigateBack: () -> Unit) {
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 24.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-
-            // Back button
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
@@ -164,11 +163,7 @@ fun HubungHeader(onNavigateBack: () -> Unit) {
                     tint               = TextWhite,
                     modifier           = Modifier.size(16.dp)
                 )
-                Text(
-                    text     = "Kembali",
-                    color    = TextWhite,
-                    fontSize = 13.sp
-                )
+                Text(text = "Kembali", color = TextWhite, fontSize = 13.sp)
             }
 
             Text(
@@ -181,10 +176,6 @@ fun HubungHeader(onNavigateBack: () -> Unit) {
     }
 }
 
-// ════════════════════════════════════════════════════════════
-//  2. PILIH CARA HUBUNGKAN CARD
-// ════════════════════════════════════════════════════════════
-
 @Composable
 fun PilihCaraCard(
     selectedMethod: String,
@@ -193,21 +184,18 @@ fun PilihCaraCard(
 ) {
     CardContainer(modifier = modifier) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-
             Text(
                 text       = "Pilih cara hubungkan",
                 color      = TextWhite,
                 fontSize   = 13.sp,
                 fontWeight = FontWeight.Bold
             )
-
             MethodOptionItem(
-                label       = "Akun sudah ada",
-                subLabel    = "Cari akun orang tua yang sudah terdaftar",
-                isSelected  = selectedMethod == "existing",
-                onClick     = { onMethodSelect("existing") }
+                label      = "Akun sudah ada",
+                subLabel   = "Cari akun orang tua yang sudah terdaftar",
+                isSelected = selectedMethod == "existing",
+                onClick    = { onMethodSelect("existing") }
             )
-
             MethodOptionItem(
                 label      = "Buat akun baru",
                 subLabel   = "Orang tua belum punya akun",
@@ -230,26 +218,21 @@ private fun MethodOptionItem(
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
             .border(
-                width  = 1.dp,
-                color  = if (isSelected) RadioActiveColor else OptionBorder,
-                shape  = RoundedCornerShape(10.dp)
+                width = 1.dp,
+                color = if (isSelected) RadioActiveColor else OptionBorder,
+                shape = RoundedCornerShape(10.dp)
             )
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment     = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Radio indicator
         Box(
             modifier = Modifier
                 .size(20.dp)
                 .clip(CircleShape)
                 .background(if (isSelected) RadioActiveColor else Color.Transparent)
-                .border(
-                    width  = 2.dp,
-                    color  = if (isSelected) RadioActiveColor else OptionBorder,
-                    shape  = CircleShape
-                )
+                .border(2.dp, if (isSelected) RadioActiveColor else OptionBorder, CircleShape)
         ) {
             if (isSelected) {
                 Box(
@@ -263,27 +246,15 @@ private fun MethodOptionItem(
         }
 
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text       = label,
-                color      = TextWhite,
-                fontSize   = 13.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text     = subLabel,
-                color    = SubtextColor,
-                fontSize = 11.sp
-            )
+            Text(text = label,    color = TextWhite,    fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text(text = subLabel, color = SubtextColor, fontSize = 11.sp)
         }
     }
 }
 
-// ════════════════════════════════════════════════════════════
-//  3. CARI AKUN CARD  (search + dynamic list / confirmation)
-// ════════════════════════════════════════════════════════════
-
 @Composable
 fun CariAkunCard(
+    akunList       : List<OrangTuaAccount>,
     searchQuery    : String,
     onSearchChange : (String) -> Unit,
     selectedAccount: OrangTuaAccount?,
@@ -291,17 +262,16 @@ fun CariAkunCard(
     onClearAccount : () -> Unit,
     modifier       : Modifier = Modifier
 ) {
-    val filteredList = remember(searchQuery) {
-        if (searchQuery.isBlank()) dummyAccounts
-        else dummyAccounts.filter {
+    val filteredList = remember(searchQuery, akunList.size) {
+        if (searchQuery.isBlank()) akunList
+        else akunList.filter {
             it.nama.contains(searchQuery, ignoreCase = true) ||
-            it.username.contains(searchQuery, ignoreCase = true)
+                    it.username.contains(searchQuery, ignoreCase = true)
         }
     }
 
     CardContainer(modifier = modifier) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-
             Text(
                 text       = "Cari akun orang tua",
                 color      = TextWhite,
@@ -309,7 +279,6 @@ fun CariAkunCard(
                 fontWeight = FontWeight.Bold
             )
 
-            // Search bar
             BasicTextField(
                 value         = searchQuery,
                 onValueChange = onSearchChange,
@@ -323,8 +292,8 @@ fun CariAkunCard(
                     .padding(horizontal = 12.dp, vertical = 11.dp),
                 decorationBox = { innerTextField ->
                     Row(
-                        verticalAlignment      = Alignment.CenterVertically,
-                        horizontalArrangement  = Arrangement.spacedBy(8.dp)
+                        verticalAlignment     = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Icon(
                             imageVector        = Icons.Filled.Search,
@@ -346,40 +315,27 @@ fun CariAkunCard(
                 }
             )
 
-            // ── Dynamic area ──────────────────────────────────
             if (selectedAccount == null) {
-                // List view
-                Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                Column {
                     filteredList.forEach { account ->
-                        AkunListItem(
-                            account  = account,
-                            onClick  = { onSelectAccount(account) }
-                        )
+                        AkunListItem(account = account, onClick = { onSelectAccount(account) })
                         if (account != filteredList.last()) {
                             Divider(color = CardBorder, thickness = 0.8.dp)
                         }
                     }
                 }
             } else {
-                // Confirmation view
                 AkunKonfirmasiCard(
-                    account        = selectedAccount,
-                    onGantiClick   = onClearAccount
+                    account      = selectedAccount,
+                    onGantiClick = onClearAccount
                 )
             }
         }
     }
 }
 
-// ─────────────────────────────────────────────────────────────
-//  List Item
-// ─────────────────────────────────────────────────────────────
-
 @Composable
-private fun AkunListItem(
-    account: OrangTuaAccount,
-    onClick: () -> Unit
-) {
+private fun AkunListItem(account: OrangTuaAccount, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -388,28 +344,16 @@ private fun AkunListItem(
         verticalAlignment     = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Avatar
         Box(
             modifier = Modifier
                 .size(42.dp)
                 .clip(CircleShape)
                 .background(AvatarGrey)
         )
-
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text       = account.nama,
-                color      = TextWhite,
-                fontSize   = 14.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text     = "${account.username}  ·  ${account.jumlahAnak} anak terdaftar",
-                color    = SubtextColor,
-                fontSize = 12.sp
-            )
+            Text(text = account.nama,     color = TextWhite,    fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text(text = "${account.username} · ${account.jumlahAnak} anak terdaftar", color = SubtextColor, fontSize = 12.sp)
         }
-
         Icon(
             imageVector        = Icons.Filled.ChevronRight,
             contentDescription = "Pilih",
@@ -419,15 +363,8 @@ private fun AkunListItem(
     }
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Confirmation card (mint)
-// ─────────────────────────────────────────────────────────────
-
 @Composable
-private fun AkunKonfirmasiCard(
-    account     : OrangTuaAccount,
-    onGantiClick: () -> Unit
-) {
+private fun AkunKonfirmasiCard(account: OrangTuaAccount, onGantiClick: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -436,8 +373,6 @@ private fun AkunKonfirmasiCard(
             .padding(12.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-
-            // Row 1: checkmark + "Akun ditemukan" + "Ganti"
             Row(
                 modifier              = Modifier.fillMaxWidth(),
                 verticalAlignment     = Alignment.CenterVertically,
@@ -460,7 +395,6 @@ private fun AkunKonfirmasiCard(
                         fontWeight = FontWeight.Bold
                     )
                 }
-
                 Text(
                     text       = "Ganti",
                     color      = ConfirmTextDark,
@@ -470,7 +404,6 @@ private fun AkunKonfirmasiCard(
                 )
             }
 
-            // Row 2: avatar + name + username
             Row(
                 verticalAlignment     = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -482,21 +415,11 @@ private fun AkunKonfirmasiCard(
                         .background(CircleMint)
                 )
                 Column {
-                    Text(
-                        text       = account.nama,
-                        color      = ConfirmTextDark,
-                        fontSize   = 14.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text     = "${account.username}  ·  ${account.jumlahAnak} anak terdaftar",
-                        color    = ConfirmTextDark.copy(alpha = 0.75f),
-                        fontSize = 11.sp
-                    )
+                    Text(text = account.nama,     color = ConfirmTextDark, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text(text = "${account.username} · ${account.jumlahAnak} anak terdaftar", color = ConfirmTextDark.copy(alpha = 0.75f), fontSize = 11.sp)
                 }
             }
 
-            // Info box (darker mint)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -516,15 +439,8 @@ private fun AkunKonfirmasiCard(
     }
 }
 
-// ════════════════════════════════════════════════════════════
-//  4. LANJUT BUTTON  (visible only after account selected)
-// ════════════════════════════════════════════════════════════
-
 @Composable
-fun LanjutButton(
-    onClick : () -> Unit,
-    modifier: Modifier = Modifier
-) {
+fun LanjutButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -535,24 +451,12 @@ fun LanjutButton(
             .padding(vertical = 16.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text       = "Lanjut- Konfirmasi →",
-            color      = TextWhite,
-            fontSize   = 15.sp,
-            fontWeight = FontWeight.Bold
-        )
+        Text(text = "Lanjut - Konfirmasi →", color = TextWhite, fontSize = 15.sp, fontWeight = FontWeight.Bold)
     }
 }
 
-// ════════════════════════════════════════════════════════════
-//  REUSABLE: CARD CONTAINER
-// ════════════════════════════════════════════════════════════
-
 @Composable
-private fun CardContainer(
-    modifier: Modifier = Modifier,
-    content : @Composable ColumnScope.() -> Unit
-) {
+private fun CardContainer(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -565,26 +469,23 @@ private fun CardContainer(
     }
 }
 
-// ════════════════════════════════════════════════════════════
-//  FUNGSI BARU: FormAkunBaruCard
-// ════════════════════════════════════════════════════════════
-
 @Composable
-fun FormAkunBaruCard(modifier: Modifier = Modifier) {
-
-    // ── State ──────────────────────────────────────────────
-    var namaOrtu    by remember { mutableStateOf("") }
-    var username    by remember { mutableStateOf("") }
-    var noHp        by remember { mutableStateOf("") }
-    var password    by remember { mutableStateOf("") }
-    // ───────────────────────────────────────────────────────
-
-    // Local tokens
-    val fieldBg         = Color(0xFF3A3A3A)
-    val fieldBorder     = Color(0xFF555555)
-    val labelColor      = Color(0xFFAAAAAA)
-    val infoBoxBg       = Color(0xFFBBCFEF)   // soft blue
-    val infoBoxText     = Color(0xFF1A3A6E)   // navy
+fun FormAkunBaruCard(
+    namaOrtu    : String,
+    onNamaChange: (String) -> Unit,
+    username    : String,
+    onUserChange: (String) -> Unit,
+    noHp        : String,
+    onHpChange  : (String) -> Unit,
+    password    : String,
+    onPassChange: (String) -> Unit,
+    modifier    : Modifier = Modifier
+) {
+    val fieldBg     = Color(0xFF3A3A3A)
+    val fieldBorder = Color(0xFF555555)
+    val labelColor  = Color(0xFFAAAAAA)
+    val infoBoxBg   = Color(0xFFBBCFEF)
+    val infoBoxText = Color(0xFF1A3A6E)
 
     Box(
         modifier = modifier
@@ -595,8 +496,6 @@ fun FormAkunBaruCard(modifier: Modifier = Modifier) {
             .padding(16.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-
-            // Card title
             Text(
                 text       = "Buat akun orang tua baru",
                 color      = TextWhite,
@@ -604,45 +503,38 @@ fun FormAkunBaruCard(modifier: Modifier = Modifier) {
                 fontWeight = FontWeight.Bold
             )
 
-            // Field 1: Nama Orang Tua
             AkunBaruInputField(
                 label         = "Nama Orang Tua",
                 value         = namaOrtu,
-                onValueChange = { namaOrtu = it },
+                onValueChange = onNamaChange,
                 placeholder   = "Nama Orang Tua",
                 fieldBg       = fieldBg,
                 fieldBorder   = fieldBorder,
                 labelColor    = labelColor
             )
-
-            // Field 2: Username Orang Tua
             AkunBaruInputField(
                 label         = "Username Orang Tua",
                 value         = username,
-                onValueChange = { username = it },
+                onValueChange = onUserChange,
                 placeholder   = "Untuk login orang tua",
                 fieldBg       = fieldBg,
                 fieldBorder   = fieldBorder,
                 labelColor    = labelColor
             )
-
-            // Field 3: No. HP
             AkunBaruInputField(
                 label         = "No. HP",
                 value         = noHp,
-                onValueChange = { noHp = it },
+                onValueChange = onHpChange,
                 placeholder   = "No. Hp Orang Tua",
                 fieldBg       = fieldBg,
                 fieldBorder   = fieldBorder,
                 labelColor    = labelColor,
                 keyboardType  = KeyboardType.Phone
             )
-
-            // Field 4: Password Sementara
             AkunBaruInputField(
-                label         = "Passwod Sementara",
+                label         = "Password Sementara",
                 value         = password,
-                onValueChange = { password = it },
+                onValueChange = onPassChange,
                 placeholder   = "Min. 6 karakter",
                 fieldBg       = fieldBg,
                 fieldBorder   = fieldBorder,
@@ -651,7 +543,6 @@ fun FormAkunBaruCard(modifier: Modifier = Modifier) {
                 isPassword    = true
             )
 
-            // Info box biru
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -670,11 +561,6 @@ fun FormAkunBaruCard(modifier: Modifier = Modifier) {
     }
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Reusable input field untuk form akun baru
-//  (private, hanya dipakai di dalam FormAkunBaruCard)
-// ─────────────────────────────────────────────────────────────
-
 @Composable
 private fun AkunBaruInputField(
     label        : String,
@@ -688,28 +574,21 @@ private fun AkunBaruInputField(
     isPassword   : Boolean      = false,
     modifier     : Modifier     = Modifier
 ) {
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(text = label, color = labelColor, fontSize = 12.sp)
-
         OutlinedTextField(
-            value         = value,
-            onValueChange = onValueChange,
-            modifier      = Modifier
+            value                = value,
+            onValueChange        = onValueChange,
+            modifier             = Modifier
                 .fillMaxWidth()
                 .height(50.dp),
-            placeholder   = {
-                Text(text = placeholder, color = Color(0xFF6B6B6B), fontSize = 14.sp)
-            },
-            singleLine             = true,
-            textStyle              = TextStyle(color = TextWhite, fontSize = 14.sp),
-            keyboardOptions        = KeyboardOptions(keyboardType = keyboardType),
-            visualTransformation   = if (isPassword) PasswordVisualTransformation()
-                                     else VisualTransformation.None,
-            shape  = RoundedCornerShape(8.dp),
-            colors = TextFieldDefaults.outlinedTextFieldColors(
+            placeholder          = { Text(text = placeholder, color = Color(0xFF6B6B6B), fontSize = 14.sp) },
+            singleLine           = true,
+            textStyle            = TextStyle(color = TextWhite, fontSize = 14.sp),
+            keyboardOptions      = KeyboardOptions(keyboardType = keyboardType),
+            visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
+            shape                = RoundedCornerShape(8.dp),
+            colors               = TextFieldDefaults.outlinedTextFieldColors(
                 textColor            = TextWhite,
                 cursorColor          = AccentGreen,
                 focusedBorderColor   = AccentGreen,
@@ -720,10 +599,6 @@ private fun AkunBaruInputField(
         )
     }
 }
-
-// ════════════════════════════════════════════════════════════
-//  PREVIEWS
-// ════════════════════════════════════════════════════════════
 
 @Preview(showBackground = true, showSystemUi = true, backgroundColor = 0xFF121212)
 @Composable

@@ -26,58 +26,57 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// ─────────────────────────────────────────────────────────────
-//  Local design tokens
-// ─────────────────────────────────────────────────────────────
-private val CardBg              = Color(0xFF2A2A2A)
-private val CardBorder          = Color(0xFF444444)
-private val RowDividerColor     = Color(0xFFFFFFFF).copy(alpha = 0.10f)
-private val AvatarGrey          = Color(0xFFAAAAAA)
-private val InfoBoxBg           = Color(0xFFC5DCF0)   // biru muda pastel
-private val InfoBoxText         = Color(0xFF1A4A6E)   // biru tua
-private val InfoBoxBold         = Color(0xFF0D3457)   // lebih gelap untuk @username
-private val SubtextColor        = Color(0xFFAAAAAA)
-private val CardTitleGrey       = Color(0xFF888888)   // "Akun Orang Tua" label
-
-// ════════════════════════════════════════════════════════════
-//  SCREEN ENTRY POINT
-// ════════════════════════════════════════════════════════════
+private val CardBg          = Color(0xFF2A2A2A)
+private val CardBorder      = Color(0xFF444444)
+private val RowDividerColor = Color(0xFFFFFFFF).copy(alpha = 0.10f)
+private val AvatarGrey      = Color(0xFFAAAAAA)
+private val InfoBoxBg       = Color(0xFFC5DCF0)
+private val InfoBoxText     = Color(0xFF1A4A6E)
+private val InfoBoxBold     = Color(0xFF0D3457)
+private val SubtextColor    = Color(0xFFAAAAAA)
+private val CardTitleGrey   = Color(0xFF888888)
 
 @Composable
 fun KonfirmasiDataScreen(
+    viewModel        : FormDataViewModel = FormDataViewModel(),
     onNavigateBack   : () -> Unit = {},
     onSimpanClicked  : () -> Unit = {},
     onPerbaikiClicked: () -> Unit = {}
 ) {
+    val anak = viewModel.formAnak
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(BackgroundDark)
+            .statusBarsPadding()
+            .navigationBarsPadding()
             .verticalScroll(rememberScrollState())
     ) {
-        // Header
         KonfirmasiHeader(onNavigateBack = onNavigateBack)
 
-        // Info teks
         Text(
-            text       = "Pastikan data berikut sudah bener sebelum menyimpan.",
+            text       = "Pastikan data berikut sudah benar sebelum menyimpan.",
             color      = TextWhite,
             fontSize   = 14.sp,
             fontWeight = FontWeight.Bold,
             modifier   = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
         )
 
-        // Card 1: Data Balita
-        DataBalitaCard(modifier = Modifier.padding(horizontal = 16.dp))
+        DataBalitaCard(
+            anak     = anak,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Card 2: Akun Orang Tua
-        AkunOrangTuaCard(modifier = Modifier.padding(horizontal = 16.dp))
+        AkunOrangTuaCard(
+            ortu     = viewModel.formOrangTua,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // Tombol aksi
         SimpanButton(
             onClick  = onSimpanClicked,
             modifier = Modifier.padding(horizontal = 16.dp)
@@ -94,10 +93,6 @@ fun KonfirmasiDataScreen(
     }
 }
 
-// ════════════════════════════════════════════════════════════
-//  1. HEADER
-// ════════════════════════════════════════════════════════════
-
 @Composable
 fun KonfirmasiHeader(onNavigateBack: () -> Unit) {
     Box(
@@ -107,8 +102,6 @@ fun KonfirmasiHeader(onNavigateBack: () -> Unit) {
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 28.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-
-            // Back button
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
@@ -127,7 +120,6 @@ fun KonfirmasiHeader(onNavigateBack: () -> Unit) {
                 Text(text = "Kembali", color = TextWhite, fontSize = 14.sp)
             }
 
-            // Title
             Text(
                 text       = "Konfirmasi Data",
                 color      = TextWhite,
@@ -138,12 +130,11 @@ fun KonfirmasiHeader(onNavigateBack: () -> Unit) {
     }
 }
 
-// ════════════════════════════════════════════════════════════
-//  2. CARD: DATA BALITA
-// ════════════════════════════════════════════════════════════
-
 @Composable
-fun DataBalitaCard(modifier: Modifier = Modifier) {
+fun DataBalitaCard(
+    anak    : FormAnakData,
+    modifier: Modifier = Modifier
+) {
     KonfirmasiCardContainer(modifier = modifier) {
         Column {
             Text(
@@ -154,24 +145,17 @@ fun DataBalitaCard(modifier: Modifier = Modifier) {
                 modifier   = Modifier.padding(bottom = 10.dp)
             )
 
-            DataRowItem(label = "Nama",           value = "Budi Prasetyo")
-            DataRowItem(label = "Tanggal Lahir",  value = "12 Mar 2025")
-            DataRowItem(label = "Usia saat ini",  value = "2 Bulan")
-            DataRowItem(label = "Jenis kelamin",  value = "Laki-laki")
-            DataRowItem(label = "Nama ibu",       value = "Rina Susanti")
+            DataRowItem(label = "Nama",          value = anak.namaLengkap.ifBlank { "-" })
+            DataRowItem(label = "NIK",           value = anak.nik.ifBlank { "-" })
+            DataRowItem(label = "Tanggal Lahir", value = anak.tanggalLahir.ifBlank { "-" })
+            DataRowItem(label = "Jenis Kelamin", value = anak.jenisKelamin.ifBlank { "-" })
+            DataRowItem(label = "Alamat",        value = anak.alamat.ifBlank { "-" })
         }
     }
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Reusable: DataRowItem
-// ─────────────────────────────────────────────────────────────
-
 @Composable
-fun DataRowItem(
-    label : String,
-    value : String
-) {
+fun DataRowItem(label: String, value: String) {
     Column {
         Row(
             modifier              = Modifier
@@ -180,34 +164,20 @@ fun DataRowItem(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment     = Alignment.CenterVertically
         ) {
-            Text(
-                text       = label,
-                color      = TextWhite,
-                fontSize   = 14.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text       = value,
-                color      = TextWhite,
-                fontSize   = 14.sp,
-                fontWeight = FontWeight.Bold
-            )
+            Text(text = label, color = TextWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text(text = value, color = TextWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold)
         }
-        // Divider di bawah setiap baris (termasuk baris terakhir sesuai desain)
         Divider(color = RowDividerColor, thickness = 1.dp)
     }
 }
 
-// ════════════════════════════════════════════════════════════
-//  3. CARD: AKUN ORANG TUA
-// ════════════════════════════════════════════════════════════
-
 @Composable
-fun AkunOrangTuaCard(modifier: Modifier = Modifier) {
+fun AkunOrangTuaCard(
+    ortu    : FormOrangTuaData,
+    modifier: Modifier = Modifier
+) {
     KonfirmasiCardContainer(modifier = modifier) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-
-            // Card title
             Text(
                 text       = "Akun Orang Tua",
                 color      = CardTitleGrey,
@@ -215,59 +185,49 @@ fun AkunOrangTuaCard(modifier: Modifier = Modifier) {
                 fontWeight = FontWeight.Bold
             )
 
-            // Profile row
             Row(
                 verticalAlignment     = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                // Avatar
                 Box(
                     modifier = Modifier
                         .size(52.dp)
                         .clip(CircleShape)
                         .background(AvatarGrey)
                 )
-
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
-                        text       = "Rina Susanti",
+                        text       = ortu.nama.ifBlank { "-" },
                         color      = TextWhite,
                         fontSize   = 16.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text     = "@ortu_rina -  3 anak terdaftar",
-                        color    = SubtextColor,
+                        text  = ortu.username.ifBlank { "-" },
+                        color = SubtextColor,
                         fontSize = 13.sp
                     )
                 }
             }
 
-            // Info box biru
-            OrangTuaInfoBox()
+            OrangTuaInfoBox(nama = ortu.nama, username = ortu.username)
         }
     }
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Info box dengan AnnotatedString untuk bold @ortu_rina
-// ─────────────────────────────────────────────────────────────
-
 @Composable
-private fun OrangTuaInfoBox() {
+private fun OrangTuaInfoBox(nama: String, username: String) {
     val infoText = buildAnnotatedString {
         withStyle(SpanStyle(color = InfoBoxText, fontSize = 13.sp)) {
             append("Anak ini akan ditambahkan ke akun ")
         }
-        withStyle(SpanStyle(
-            color      = InfoBoxBold,
-            fontSize   = 13.sp,
-            fontWeight = FontWeight.Bold
-        )) {
-            append("@ortu_rina")
+        withStyle(SpanStyle(color = InfoBoxBold, fontSize = 13.sp, fontWeight = FontWeight.Bold)) {
+            append(username.ifBlank { "-" })
         }
         withStyle(SpanStyle(color = InfoBoxText, fontSize = 13.sp)) {
-            append(" dan langsung terlihat saat orang tua login. Rina Susanti sudah punya 3 anak terdaftar")
+            append(" dan langsung terlihat saat orang tua login. ")
+            append(nama.ifBlank { "Orang tua" })
+            append(" sudah terdaftar.")
         }
     }
 
@@ -278,16 +238,9 @@ private fun OrangTuaInfoBox() {
             .background(InfoBoxBg)
             .padding(12.dp)
     ) {
-        Text(
-            text       = infoText,
-            lineHeight = 20.sp
-        )
+        Text(text = infoText, lineHeight = 20.sp)
     }
 }
-
-// ════════════════════════════════════════════════════════════
-//  4. TOMBOL AKSI
-// ════════════════════════════════════════════════════════════
 
 @Composable
 fun SimpanButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
@@ -330,10 +283,6 @@ fun PerbaikiButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     }
 }
 
-// ════════════════════════════════════════════════════════════
-//  REUSABLE: CARD CONTAINER
-// ════════════════════════════════════════════════════════════
-
 @Composable
 private fun KonfirmasiCardContainer(
     modifier: Modifier = Modifier,
@@ -351,12 +300,8 @@ private fun KonfirmasiCardContainer(
     }
 }
 
-// ════════════════════════════════════════════════════════════
-//  PREVIEW
-// ════════════════════════════════════════════════════════════
-
 @Preview(showBackground = true, showSystemUi = true, backgroundColor = 0xFF121212)
 @Composable
 fun KonfirmasiDataScreenPreview() {
-    KonfirmasiDataScreen()
+    KonfirmasiDataScreen(viewModel = FormDataViewModel())
 }

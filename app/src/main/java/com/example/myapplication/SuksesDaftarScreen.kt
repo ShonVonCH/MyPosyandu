@@ -25,56 +25,61 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// ─────────────────────────────────────────────────────────────
-//  Local design tokens
-// ─────────────────────────────────────────────────────────────
-private val SuccessCircleBg     = Color(0xFFB8EDD8)   // mint large circle
-private val SuccessIconColor    = Color(0xFF1E7A55)   // dark green check inside circle
-private val DataCardBg          = Color(0xFF2A2A2A)
-private val DataCardBorder      = Color(0xFF444444)
-private val InnerBoxBg          = Color(0xFF1A1A1A)   // very dark connected-status box
-private val ConnectedIconColor  = Color(0xFF2E9B6E)   // green circle check outline
-private val AvatarGreyLight     = Color(0xFFCCCCCC)
-private val UpdateCardBg        = Color(0xFFBBCFEF)   // cornflower blue card
-private val UpdateNavyDark      = Color(0xFF1A3A6E)   // all text inside blue card
-private val UpdateDividerColor  = Color(0xFF1A3A6E).copy(alpha = 0.25f)
-private val SubtextGrey         = Color(0xFFAAAAAA)
-
-// ════════════════════════════════════════════════════════════
-//  SCREEN ENTRY POINT
-// ════════════════════════════════════════════════════════════
+private val SuccessCircleBg    = Color(0xFFB8EDD8)
+private val SuccessIconColor   = Color(0xFF1E7A55)
+private val DataCardBg         = Color(0xFF2A2A2A)
+private val DataCardBorder     = Color(0xFF444444)
+private val InnerBoxBg         = Color(0xFF1A1A1A)
+private val ConnectedIconColor = Color(0xFF2E9B6E)
+private val AvatarGreyLight    = Color(0xFFCCCCCC)
+private val UpdateCardBg       = Color(0xFFBBCFEF)
+private val UpdateNavyDark     = Color(0xFF1A3A6E)
+private val UpdateDividerColor = Color(0xFF1A3A6E).copy(alpha = 0.25f)
+private val SubtextGrey        = Color(0xFFAAAAAA)
 
 @Composable
 fun SuksesDaftarScreen(
+    viewModel       : FormDataViewModel = FormDataViewModel(),
     onNavigateBack  : () -> Unit = {},
     onSelesaiClicked: () -> Unit = {}
 ) {
+    val anak = viewModel.lastSavedAnak
+    val ortu = viewModel.akunOrangTuaList
+        .firstOrNull { it.username == viewModel.lastSavedOrangTua.username }
+        ?: OrangTuaAccount(
+            nama       = viewModel.lastSavedOrangTua.nama,
+            username   = viewModel.lastSavedOrangTua.username,
+            jumlahAnak = 1
+        )
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(BackgroundDark)
             .verticalScroll(rememberScrollState())
     ) {
-        // 1. Header
         SuksesHeader(onNavigateBack = onNavigateBack)
-
-        // 2. Status sukses — ikon + teks
-        SuksesStatus()
+        SuksesStatus(namaAnak = anak.namaLengkap)
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // 3. Card data anak terhubung
-        AnakTerhubungCard(modifier = Modifier.padding(horizontal = 16.dp))
+        AnakTerhubungCard(
+            anak     = anak,
+            ortu     = ortu,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // 4. Card update akun orang tua
-        UpdateOrangTuaCard(modifier = Modifier.padding(horizontal = 16.dp))
+        UpdateOrangTuaCard(
+            anak     = anak,
+            ortu     = ortu,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // 5. Tombol selesai
-        SelesaiButton(
+        SelesaiDaftarButtons(
             onClick  = onSelesaiClicked,
             modifier = Modifier.padding(horizontal = 16.dp)
         )
@@ -82,10 +87,6 @@ fun SuksesDaftarScreen(
         Spacer(modifier = Modifier.height(48.dp))
     }
 }
-
-// ════════════════════════════════════════════════════════════
-//  1. HEADER
-// ════════════════════════════════════════════════════════════
 
 @Composable
 fun SuksesHeader(onNavigateBack: () -> Unit) {
@@ -96,8 +97,6 @@ fun SuksesHeader(onNavigateBack: () -> Unit) {
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 28.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-
-            // Back button
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
@@ -126,12 +125,8 @@ fun SuksesHeader(onNavigateBack: () -> Unit) {
     }
 }
 
-// ════════════════════════════════════════════════════════════
-//  2. STATUS SUKSES
-// ════════════════════════════════════════════════════════════
-
 @Composable
-fun SuksesStatus() {
+fun SuksesStatus(namaAnak: String) {
     Column(
         modifier            = Modifier
             .fillMaxWidth()
@@ -139,7 +134,6 @@ fun SuksesStatus() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        // Large mint circle with outlined check icon
         Box(
             modifier = Modifier
                 .size(100.dp)
@@ -155,9 +149,8 @@ fun SuksesStatus() {
             )
         }
 
-        // Success description text
         Text(
-            text       = "Budi Prasetyo telah terdaftar dan sudah terhubung ke akun orang tua",
+            text       = "${namaAnak.ifBlank { "-" }} telah terdaftar dan sudah terhubung ke akun orang tua",
             color      = TextWhite,
             fontSize   = 16.sp,
             fontWeight = FontWeight.Bold,
@@ -167,12 +160,12 @@ fun SuksesStatus() {
     }
 }
 
-// ════════════════════════════════════════════════════════════
-//  3. CARD: ANAK TERHUBUNG
-// ════════════════════════════════════════════════════════════
-
 @Composable
-fun AnakTerhubungCard(modifier: Modifier = Modifier) {
+fun AnakTerhubungCard(
+    anak    : FormAnakData,
+    ortu    : OrangTuaAccount,
+    modifier: Modifier = Modifier
+) {
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -182,8 +175,6 @@ fun AnakTerhubungCard(modifier: Modifier = Modifier) {
             .padding(16.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-
-            // Profile row: avatar + name + info
             Row(
                 verticalAlignment     = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
@@ -196,20 +187,19 @@ fun AnakTerhubungCard(modifier: Modifier = Modifier) {
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
-                        text       = "Budi Prasetyo",
+                        text       = anak.namaLengkap.ifBlank { "-" },
                         color      = TextWhite,
                         fontSize   = 18.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text     = "2 bulan -  Laki-laki",
+                        text     = "${anak.tanggalLahir.ifBlank { "-" }}  •  ${anak.jenisKelamin.ifBlank { "-" }}",
                         color    = SubtextGrey,
                         fontSize = 13.sp
                     )
                 }
             }
 
-            // Connected status inner box
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -229,14 +219,12 @@ fun AnakTerhubungCard(modifier: Modifier = Modifier) {
                             fontSize = 12.sp
                         )
                         Text(
-                            text       = "Rina Susanti - @ortu_rina",
+                            text       = "${ortu.nama} - ${ortu.username}",
                             color      = TextWhite,
                             fontSize   = 14.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
-
-                    // Green outlined check circle
                     Icon(
                         imageVector        = Icons.Outlined.CheckCircle,
                         contentDescription = "Terhubung",
@@ -249,12 +237,12 @@ fun AnakTerhubungCard(modifier: Modifier = Modifier) {
     }
 }
 
-// ════════════════════════════════════════════════════════════
-//  4. CARD: UPDATE AKUN ORANG TUA
-// ════════════════════════════════════════════════════════════
-
 @Composable
-fun UpdateOrangTuaCard(modifier: Modifier = Modifier) {
+fun UpdateOrangTuaCard(
+    anak    : FormAnakData,
+    ortu    : OrangTuaAccount,
+    modifier: Modifier = Modifier
+) {
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -263,8 +251,6 @@ fun UpdateOrangTuaCard(modifier: Modifier = Modifier) {
             .padding(16.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-
-            // Card title
             Text(
                 text       = "Update di akun orang tua",
                 color      = UpdateNavyDark,
@@ -272,7 +258,6 @@ fun UpdateOrangTuaCard(modifier: Modifier = Modifier) {
                 fontWeight = FontWeight.Bold
             )
 
-            // Profile row
             Row(
                 verticalAlignment     = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
@@ -285,25 +270,23 @@ fun UpdateOrangTuaCard(modifier: Modifier = Modifier) {
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
-                        text       = "Rina Susanti(@ortu_rina)",
+                        text       = "${ortu.nama} (${ortu.username})",
                         color      = UpdateNavyDark,
                         fontSize   = 14.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text     = "Kini memiliki 4 anak terdaftar",
+                        text     = "Kini memiliki ${ortu.jumlahAnak} anak terdaftar",
                         color    = UpdateNavyDark,
                         fontSize = 13.sp
                     )
                 }
             }
 
-            // Divider — navy semi-transparent
             Divider(color = UpdateDividerColor, thickness = 1.dp)
 
-            // Info text
             Text(
-                text       = "Budi Prasetyo sudah muncul di halaman anak-anak saat orang tua login berikutnya.",
+                text       = "${anak.namaLengkap.ifBlank { "Anak ini" }} sudah muncul di halaman anak-anak saat orang tua login berikutnya.",
                 color      = UpdateNavyDark,
                 fontSize   = 13.sp,
                 lineHeight = 20.sp
@@ -312,12 +295,8 @@ fun UpdateOrangTuaCard(modifier: Modifier = Modifier) {
     }
 }
 
-// ════════════════════════════════════════════════════════════
-//  5. TOMBOL SELESAI
-// ════════════════════════════════════════════════════════════
-
 @Composable
-fun SelesaiButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun SelesaiDaftarButtons(onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -336,12 +315,8 @@ fun SelesaiButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     }
 }
 
-// ════════════════════════════════════════════════════════════
-//  PREVIEW
-// ════════════════════════════════════════════════════════════
-
 @Preview(showBackground = true, showSystemUi = true, backgroundColor = 0xFF121212)
 @Composable
 fun SuksesDaftarScreenPreview() {
-    SuksesDaftarScreen()
+    SuksesDaftarScreen(viewModel = FormDataViewModel())
 }

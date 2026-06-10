@@ -76,72 +76,70 @@ fun ImunisasiScreen(onNavigateBack: () -> Unit = {}) {
         modifier = Modifier
             .fillMaxSize()
             .background(BackgroundDark)
-            .verticalScroll(rememberScrollState())
+            .statusBarsPadding()
+            .navigationBarsPadding()
     ) {
-        // Header hijau
         ImunisasiHeader(onNavigateBack = onNavigateBack)
 
-        // Tab row
         ImunisasiTabs(
             activeTab     = activeTab,
             onTabSelected = { activeTab = it }
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        // ── Tab Content dengan scroll ──────────────────────
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+        ) {
+            Spacer(modifier = Modifier.height(12.dp))
 
-        // ── Tab Content ──────────────────────────────────────
-        when (activeTab) {
-            // ── Tab 0: Status ────────────────────────────────────────
-            0 -> {
-                Spacer(modifier = Modifier.height(12.dp))
+            when (activeTab) {
+                0 -> {
+                    ImunisasiCard(
+                        usia     = "Lahir",
+                        status   = "Lengkap",
+                        vaccines = listOf(
+                            VaccineData("Hepatitis B (HB-0)", "10 Jul 2021 - Posyandu")
+                        ),
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    ImunisasiCard(
+                        usia     = "1 Bulan",
+                        status   = "Lengkap",
+                        vaccines = listOf(
+                            VaccineData("BCG",     "10 Jul 2021 - Posyandu"),
+                            VaccineData("Polio 1", "10 Jul 2021 - Posyandu")
+                        ),
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    ImunisasiCard(
+                        usia     = "2 Bulan",
+                        status   = "Terlambat",
+                        vaccines = listOf(
+                            VaccineData("DPT-HB-Hib 1", "10 Jul 2021 - Posyandu"),
+                            VaccineData("Polio 2",       "10 Jul 2021 - Posyandu"),
+                            VaccineData("IPV 1",         "Terlambat - 15 Mar 2023", isLate = true)
+                        ),
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                }
 
-                ImunisasiCard(
-                    usia     = "Lahir",
-                    status   = "Lengkap",
-                    vaccines = listOf(
-                        VaccineData("Hepatitis B (HB-0)", "10 Jul 2021 - Posyandu")
-                    ),
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                ImunisasiCard(
-                    usia     = "1 Bulan",
-                    status   = "Lengkap",
-                    vaccines = listOf(
-                        VaccineData("BCG",     "10 Jul 2021 - Posyandu"),
-                        VaccineData("Polio 1", "10 Jul 2021 - Posyandu")
-                    ),
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                ImunisasiCard(
-                    usia     = "2 Bulan",
-                    status   = "Terlambat",
-                    vaccines = listOf(
-                        VaccineData("DPT-HB-Hib 1", "10 Jul 2021 - Posyandu"),
-                        VaccineData("Polio 2",       "10 Jul 2021 - Posyandu"),
-                        VaccineData("IPV 1",         "Terlambat - 15 Mar 2023", isLate = true)
-                    ),
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-                Spacer(modifier = Modifier.height(32.dp))
+                1 -> {
+                    // TODO: konten Akan Datang
+                }
+
+                2 -> {
+                    CatatVaksinForm(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        onSimpan = { }
+                    )
+                }
             }
 
-            // ── Tab 1: Akan Datang ───────────────────────────────────
-            1 -> {
-                // TODO: Tambahkan konten "Akan Datang" di sini
-                Spacer(modifier = Modifier.height(32.dp))
-            }
-
-            // ── Tab 2: Catat ─────────────────────────────────────────
-            2 -> {
-                Spacer(modifier = Modifier.height(12.dp))
-                CatatVaksinForm(
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    onSimpan = { /* TODO: simpan ke backend / navigasi */ }
-                )
-                Spacer(modifier = Modifier.height(32.dp))
-            }
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }

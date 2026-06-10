@@ -59,6 +59,8 @@ fun LoginScreen(onNavigateToDashboard: (String) -> Unit = {}) {
             .fillMaxSize()
             .background(BackgroundDark)
             .verticalScroll(rememberScrollState())
+            .statusBarsPadding()         // ← ikuti tinggi status bar
+            .padding(top = 24.dp)        // ← tambahan ruang di bawah status bar
     ) {
         // ── Logo / branding block ────────────────────────────
         LoginHeader()

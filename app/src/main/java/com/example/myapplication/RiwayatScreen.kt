@@ -22,14 +22,13 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-
 // ─────────────────────────────────────────────────────────────
 //  Extra colours local to this screen
 // ─────────────────────────────────────────────────────────────
-private val StatBoxBg       = Color(0xFF1A1A1A)   // very dark box inside summary card
-private val StatusCardBg    = Color(0xFFB8EDD8)   // mint green status card
-private val StatusTextDark  = Color(0xFF1E6B4E)   // dark green text on status card
-private val VaksinGreen     = Color(0xFF7ECFB0)   // "100%" mint colour
+private val StatBoxBg      = Color(0xFF1A1A1A)
+private val StatusCardBg   = Color(0xFFB8EDD8)
+private val StatusTextDark = Color(0xFF1E6B4E)
+private val VaksinGreen    = Color(0xFF7ECFB0)
 
 // ════════════════════════════════════════════════════════════
 //  SCREEN ENTRY POINT
@@ -37,28 +36,46 @@ private val VaksinGreen     = Color(0xFF7ECFB0)   // "100%" mint colour
 
 @Composable
 fun RiwayatScreen(
-    namaAnak              : String  = "Michael Kwok",
-    beratBadan            : String  = "8.1",
-    tinggiBadan           : String  = "72",
-    onNavigateBack        : () -> Unit = {},
-    onNavigateToPemeriksaan: () -> Unit = {},
-    onNavigateToImunisasi : () -> Unit = {}
+    namaAnak                : String  = "Michael Kwok",
+    umurBulan               : Int     = 0,
+    jenisKelamin            : String  = "-",   // "L" atau "P"
+    beratBadanTerakhir      : String  = "",
+    tinggiBadanTerakhir     : String  = "",
+    onNavigateBack          : () -> Unit = {},
+    onNavigateToPemeriksaan : () -> Unit = {},
+    onNavigateToImunisasi   : () -> Unit = {}
 ) {
+    // Tampilkan "–" bila belum pernah diisi
+    val tampilBerat  = if (beratBadanTerakhir.isNotBlank())  "$beratBadanTerakhir kg"  else "–"
+    val tampilTinggi = if (tinggiBadanTerakhir.isNotBlank()) "$tinggiBadanTerakhir cm" else "–"
+
+    // Label umur & jenis kelamin
+    val labelJK = when (jenisKelamin) {
+        "L"  -> "Laki-Laki"
+        "P"  -> "Perempuan"
+        else -> jenisKelamin
+    }
+    val labelUmur = if (umurBulan > 0) "$umurBulan Bulan" else "–"
+    val subLabel  = if (labelUmur != "–" && labelJK.isNotBlank() && labelJK != "-")
+        "$labelUmur · $labelJK"
+    else if (labelUmur != "–") labelUmur
+    else if (labelJK.isNotBlank() && labelJK != "-") labelJK
+    else "–"
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(BackgroundDark)
             .verticalScroll(rememberScrollState())
     ) {
-        // 1. Header hijau atas
         RiwayatHeader(
             namaAnak       = namaAnak,
+            subLabel       = subLabel,
             onNavigateBack = onNavigateBack
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 2. Action buttons row
         RiwayatActions(
             onNavigateToPemeriksaan = onNavigateToPemeriksaan,
             onNavigateToImunisasi   = onNavigateToImunisasi,
@@ -67,20 +84,15 @@ fun RiwayatScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 3. Summary card
         RiwayatSummary(
-            beratBadan  = beratBadan,
-            tinggiBadan = tinggiBadan,
-            modifier    = Modifier.padding(horizontal = 16.dp)
+            beratBadanDisplay  = tampilBerat,
+            tinggiBadanDisplay = tampilTinggi,
+            modifier           = Modifier.padding(horizontal = 16.dp)
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 4. Status card
-        RiwayatStatus(
-            namaAnak = namaAnak,
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
+        RiwayatStatus(namaAnak = namaAnak, modifier = Modifier.padding(horizontal = 16.dp))
 
         Spacer(modifier = Modifier.height(32.dp))
     }
@@ -93,6 +105,7 @@ fun RiwayatScreen(
 @Composable
 fun RiwayatHeader(
     namaAnak      : String,
+    subLabel      : String,
     onNavigateBack: () -> Unit
 ) {
     Box(
@@ -102,16 +115,10 @@ fun RiwayatHeader(
             .padding(start = 16.dp, end = 16.dp, top = 40.dp, bottom = 24.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-
-            // Back button — outlined box
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
-                    .border(
-                        width  = 1.dp,
-                        color  = TextWhite,
-                        shape  = RoundedCornerShape(8.dp)
-                    )
+                    .border(1.dp, TextWhite, RoundedCornerShape(8.dp))
                     .clickable(onClick = onNavigateBack)
                     .padding(horizontal = 14.dp, vertical = 8.dp),
                 verticalAlignment     = Alignment.CenterVertically,
@@ -123,27 +130,19 @@ fun RiwayatHeader(
                     tint               = TextWhite,
                     modifier           = Modifier.size(16.dp)
                 )
-                Text(
-                    text       = "Kembali",
-                    color      = TextWhite,
-                    fontSize   = 13.sp,
-                    fontWeight = FontWeight.Normal
-                )
+                Text(text = "Kembali", color = TextWhite, fontSize = 13.sp)
             }
 
-            // Profile row
             Row(
                 verticalAlignment     = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                // Avatar circle
                 Box(
                     modifier = Modifier
                         .size(52.dp)
                         .clip(CircleShape)
                         .background(CircleMint)
                 )
-
                 Column {
                     Text(
                         text       = namaAnak,
@@ -153,8 +152,8 @@ fun RiwayatHeader(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text     = "36 Bulan ~ Laki-Laki",
-                        color    = TextGreenLight,
+                        text  = subLabel,
+                        color = TextGreenLight,
                         fontSize = 13.sp
                     )
                 }
@@ -177,25 +176,23 @@ fun RiwayatActions(
         modifier              = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Card Pemeriksaan
         ActionCard(
-            label    = "Pemeriksaan",
-            iconEmoji = "🩺",
-            bgColor  = MenuMintBg,
+            label       = "Pemeriksaan",
+            iconEmoji   = "🩺",
+            bgColor     = MenuMintBg,
             borderColor = MenuMintBorder,
             textColor   = MenuMintText,
-            onClick  = onNavigateToPemeriksaan,
-            modifier = Modifier.weight(1f)
+            onClick     = onNavigateToPemeriksaan,
+            modifier    = Modifier.weight(1f)
         )
-        // Card Imunisasi
         ActionCard(
-            label    = "Imunisasi",
-            iconEmoji = "💉",
-            bgColor  = MenuOrangeBg,
+            label       = "Imunisasi",
+            iconEmoji   = "💉",
+            bgColor     = MenuOrangeBg,
             borderColor = MenuOrangeBorder,
             textColor   = MenuOrangeText,
-            onClick  = onNavigateToImunisasi,
-            modifier = Modifier.weight(1f)
+            onClick     = onNavigateToImunisasi,
+            modifier    = Modifier.weight(1f)
         )
     }
 }
@@ -210,30 +207,20 @@ private fun ActionCard(
     onClick    : () -> Unit,
     modifier   : Modifier = Modifier
 ) {
-    // Outer card – dark grey with subtle border
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
             .background(SurfaceDark)
-            .border(
-                width  = 1.dp,
-                color  = SurfaceDarkBorder,
-                shape  = RoundedCornerShape(16.dp)
-            )
+            .border(1.dp, SurfaceDarkBorder, RoundedCornerShape(16.dp))
             .padding(12.dp),
         contentAlignment = Alignment.Center
     ) {
-        // Inner coloured button
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
                 .background(bgColor)
-                .border(
-                    width  = 1.5.dp,
-                    color  = borderColor,
-                    shape  = RoundedCornerShape(12.dp)
-                )
+                .border(1.5.dp, borderColor, RoundedCornerShape(12.dp))
                 .clickable(onClick = onClick)
                 .padding(vertical = 20.dp),
             contentAlignment = Alignment.Center
@@ -242,19 +229,8 @@ private fun ActionCard(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // ── ICON SLOT ──────────────────────────────
-                // Replace emoji with:
-                // Icon(painter = painterResource(R.drawable.ic_...),
-                //      contentDescription = label, tint = textColor,
-                //      modifier = Modifier.size(28.dp))
                 Text(text = iconEmoji, fontSize = 26.sp)
-                // ── END ICON SLOT ──────────────────────────
-                Text(
-                    text       = label,
-                    color      = textColor,
-                    fontSize   = 13.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
+                Text(text = label, color = textColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -266,49 +242,37 @@ private fun ActionCard(
 
 @Composable
 fun RiwayatSummary(
-    beratBadan  : String,
-    tinggiBadan : String,
-    modifier    : Modifier = Modifier
+    beratBadanDisplay  : String,
+    tinggiBadanDisplay : String,
+    modifier           : Modifier = Modifier
 ) {
     Box(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(SurfaceDark)
-            .border(
-                width  = 1.dp,
-                color  = SurfaceDarkBorder,
-                shape  = RoundedCornerShape(16.dp)
-            )
+            .border(1.dp, SurfaceDarkBorder, RoundedCornerShape(16.dp))
             .padding(16.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(text = "Ringkasan terkini", color = TextWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold)
 
-            Text(
-                text       = "Ringkasan terkini",
-                color      = TextWhite,
-                fontSize   = 14.sp,
-                fontWeight = FontWeight.Bold
-            )
-
-            // Berat & Tinggi row
             Row(
                 modifier              = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 SummaryStatBox(
-                    value    = "$beratBadan kg",
+                    value    = beratBadanDisplay,
                     label    = "Berat badan",
                     modifier = Modifier.weight(1f)
                 )
                 SummaryStatBox(
-                    value    = "$tinggiBadan cm",
+                    value    = tinggiBadanDisplay,
                     label    = "Tinggi badan",
                     modifier = Modifier.weight(1f)
                 )
             }
 
-            // Vaksin full-width box
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -317,18 +281,9 @@ fun RiwayatSummary(
                     .padding(horizontal = 14.dp, vertical = 12.dp)
             ) {
                 Column {
-                    Text(
-                        text       = "100%",
-                        color      = VaksinGreen,
-                        fontSize   = 26.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text(text = "100%", color = VaksinGreen, fontSize = 26.sp, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text     = "Vaksin lengkap",
-                        color    = TextGrey,
-                        fontSize = 12.sp
-                    )
+                    Text(text = "Vaksin lengkap", color = TextGrey, fontSize = 12.sp)
                 }
             }
         }
@@ -348,18 +303,9 @@ private fun SummaryStatBox(
             .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
         Column {
-            Text(
-                text       = value,
-                color      = TextWhite,
-                fontSize   = 26.sp,
-                fontWeight = FontWeight.Bold
-            )
+            Text(text = value, color = TextWhite, fontSize = 26.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text     = label,
-                color    = TextGrey,
-                fontSize = 12.sp
-            )
+            Text(text = label, color = TextGrey, fontSize = 12.sp)
         }
     }
 }
@@ -381,12 +327,7 @@ fun RiwayatStatus(
             .padding(16.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(
-                text       = "Kondisi Baik",
-                color      = StatusTextDark,
-                fontSize   = 15.sp,
-                fontWeight = FontWeight.Bold
-            )
+            Text(text = "Kondisi Baik", color = StatusTextDark, fontSize = 15.sp, fontWeight = FontWeight.Bold)
             Text(
                 text     = "Pertumbuhan dan vaksin $namaAnak dalam kondisi baik.",
                 color    = StatusTextDark,
@@ -400,8 +341,19 @@ fun RiwayatStatus(
 //  PREVIEW
 // ════════════════════════════════════════════════════════════
 
-@Preview(showBackground = true, showSystemUi = true, backgroundColor = 0xFF121212)
+@Preview(showBackground = true, showSystemUi = true, backgroundColor = 0xFF121212L)
 @Composable
 fun RiwayatScreenPreview() {
+    RiwayatScreen(
+        beratBadanTerakhir  = "8.1",
+        tinggiBadanTerakhir = "72",
+        umurBulan           = 36,
+        jenisKelamin        = "L"
+    )
+}
+
+@Preview(showBackground = true, showSystemUi = true, backgroundColor = 0xFF121212L)
+@Composable
+fun RiwayatScreenEmptyPreview() {
     RiwayatScreen()
 }

@@ -34,9 +34,8 @@ import androidx.compose.ui.unit.sp
 
 @Composable
 fun DashboardScreen(
-    onNavigateToPemeriksaan: () -> Unit = {},
     onNavigateToDataAnak: () -> Unit = {},
-    onNavigateToImunisasi: () -> Unit = {}
+    onNavigateToLaporan : () -> Unit = {}
 ) {
     Box(
         modifier = Modifier
@@ -71,11 +70,9 @@ fun DashboardScreen(
             item { Spacer(modifier = Modifier.height(16.dp)) }
             item {
                 MenuGrid(
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    onPemeriksaanClick = onNavigateToPemeriksaan,
-                    onDataAnakClick    = onNavigateToDataAnak,
-                    onVaksinClick      = onNavigateToImunisasi,
-                    onLaporanClick     = { /* navigate */ }
+                    modifier        = Modifier.padding(horizontal = 16.dp),
+                    onDataAnakClick = onNavigateToDataAnak,
+                    onLaporanClick  = onNavigateToLaporan
                 )
             }
         }
@@ -333,62 +330,32 @@ data class MenuItemData(
 @Composable
 fun MenuGrid(
     modifier: Modifier = Modifier,
-    onPemeriksaanClick: () -> Unit = {},
     onDataAnakClick: () -> Unit = {},
-    onVaksinClick: () -> Unit = {},
-    onLaporanClick: () -> Unit = {}
+    onLaporanClick : () -> Unit = {}
 ) {
     val items = listOf(
-        MenuItemData("Pemeriksaan", MenuMintBg,    MenuMintBorder,   MenuMintIcon,   MenuMintText,   "🩺"),
-        MenuItemData("Data Anak",   MenuBlueBg,    MenuBlueBorder,   MenuBlueIcon,   MenuBlueText,   "📋"),
-        MenuItemData("Vaksin",      MenuOrangeBg,  MenuOrangeBorder, MenuOrangeIcon, MenuOrangeText, "💉"),
-        MenuItemData("Laporan",     MenuPinkBg,    MenuPinkBorder,   MenuPinkIcon,   MenuPinkText,   "📝")
+        MenuItemData("Data Anak", MenuBlueBg,   MenuBlueBorder, MenuBlueIcon, MenuBlueText, "📋"),
+        MenuItemData("Laporan",   MenuPinkBg,   MenuPinkBorder, MenuPinkIcon, MenuPinkText, "📝")
     )
 
-    val clicks = listOf(onPemeriksaanClick, onDataAnakClick, onVaksinClick, onLaporanClick)
+    val clicks = listOf(onDataAnakClick, onLaporanClick)
 
     Box(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
             .background(SurfaceDark)
-            .border(
-                width = 1.dp,
-                color = SurfaceDarkBorder,
-                shape = RoundedCornerShape(20.dp)
-            )
+            .border(1.dp, SurfaceDarkBorder, RoundedCornerShape(20.dp))
             .padding(16.dp)
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            // Row 1 : Pemeriksaan + Data Anak
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+        Row(
+            modifier              = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items.forEachIndexed { index, data ->
                 MenuItemButton(
-                    data    = items[0],
-                    onClick = clicks[0],
-                    modifier = Modifier.weight(1f)
-                )
-                MenuItemButton(
-                    data    = items[1],
-                    onClick = clicks[1],
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            // Row 2 : Vaksin + Laporan
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                MenuItemButton(
-                    data    = items[2],
-                    onClick = clicks[2],
-                    modifier = Modifier.weight(1f)
-                )
-                MenuItemButton(
-                    data    = items[3],
-                    onClick = clicks[3],
+                    data     = data,
+                    onClick  = clicks[index],
                     modifier = Modifier.weight(1f)
                 )
             }
