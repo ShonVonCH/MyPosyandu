@@ -34,9 +34,15 @@ import androidx.compose.ui.unit.sp
 
 @Composable
 fun DashboardScreen(
+    totalAnak           : Int   = 0,
+    anakHadir           : Int   = 0,
     onNavigateToDataAnak: () -> Unit = {},
     onNavigateToLaporan : () -> Unit = {}
 ) {
+    // Hitung persentase kehadiran — hindari pembagian 0
+    val persenHadir  = if (totalAnak > 0) anakHadir.toFloat() / totalAnak else 0f
+    val persenLabel  = if (totalAnak > 0) "${(persenHadir * 100).toInt()}%" else "0%"
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -49,22 +55,23 @@ fun DashboardScreen(
             item { HeaderSection() }
             item { Spacer(modifier = Modifier.height(12.dp)) }
             item {
-                ScheduleCard(
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
+                ScheduleCard(modifier = Modifier.padding(horizontal = 16.dp))
             }
             item { Spacer(modifier = Modifier.height(16.dp)) }
             item {
+                // Teruskan nilai nyata
                 StatsRow(
-                    modifier = Modifier.padding(horizontal = 16.dp)
+                    totalAnak  = totalAnak,
+                    anakHadir  = anakHadir,
+                    modifier   = Modifier.padding(horizontal = 16.dp)
                 )
             }
             item { Spacer(modifier = Modifier.height(16.dp)) }
             item {
                 ProgressCard(
-                    attendancePercent = 0.80f,
-                    percentLabel = "80%",
-                    modifier = Modifier.padding(horizontal = 16.dp)
+                    attendancePercent = persenHadir,
+                    percentLabel      = persenLabel,
+                    modifier          = Modifier.padding(horizontal = 16.dp)
                 )
             }
             item { Spacer(modifier = Modifier.height(16.dp)) }
@@ -196,22 +203,26 @@ fun ScheduleCard(modifier: Modifier = Modifier) {
 // ════════════════════════════════════════════════════════════
 
 @Composable
-fun StatsRow(modifier: Modifier = Modifier) {
+fun StatsRow(
+    totalAnak: Int   = 0,
+    anakHadir: Int   = 0,
+    modifier : Modifier = Modifier
+) {
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         StatCard(
-            label = "Total Anak",
-            value = "10",
+            label      = "Total Anak",
+            value      = totalAnak.toString(),
             valueColor = TextWhite,
-            modifier = Modifier.weight(1f)
+            modifier   = Modifier.weight(1f)
         )
         StatCard(
-            label = "Anak yang hadir",
-            value = "8",
+            label      = "Anak yang hadir",
+            value      = anakHadir.toString(),
             valueColor = AccentGreen,
-            modifier = Modifier.weight(1f)
+            modifier   = Modifier.weight(1f)
         )
     }
 }

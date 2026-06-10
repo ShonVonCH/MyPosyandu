@@ -228,6 +228,7 @@ fun statusToProgressColor(warna: StatusWarna) = when (warna) {
 //  SCREEN
 // ════════════════════════════════════════════════════════════
 
+// Ubah parameter onSimpan di PemeriksaanScreen
 @Composable
 fun PemeriksaanScreen(
     namaAnak         : String = "Michael Kwok",
@@ -235,8 +236,8 @@ fun PemeriksaanScreen(
     jenisKelamin     : String = "Laki-laki",
     onNavigateBack   : () -> Unit = {},
     onNavigateToHasil: () -> Unit = {},
-    /** Dipanggil saat analisis berhasil — kirim (beratBadan, tinggiBadan) ke parent */
-    onSimpan         : (beratBadan: String, tinggiBadan: String) -> Unit = { _, _ -> }
+    // Tambah HasilAnalisis ke callback
+    onSimpan: (beratBadan: String, tinggiBadan: String, analisis: HasilAnalisis) -> Unit = { _, _, _ -> }
 ) {
     var beratBadan    by remember { mutableStateOf("") }
     var tinggiBadan   by remember { mutableStateOf("") }
@@ -280,10 +281,11 @@ fun PemeriksaanScreen(
                         val tb = tinggiBadan.toDoubleOrNull()
                         val bb = beratBadan.toDoubleOrNull()
                         if (tb != null && bb != null) {
-                            hasil     = analisisWHO(tb, bb, umurBulan, jenisKelamin)
-                            activeTab = 1
-                            // Simpan ke parent agar RiwayatScreen ikut terupdate
-                            onSimpan(beratBadan, tinggiBadan)
+                            val analisis  = analisisWHO(tb, bb, umurBulan, jenisKelamin)
+                            hasil         = analisis
+                            activeTab     = 1
+                            // Kirim termasuk objek analisis
+                            onSimpan(beratBadan, tinggiBadan, analisis)
                         }
                     }
                 )

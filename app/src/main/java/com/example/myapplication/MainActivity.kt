@@ -78,7 +78,16 @@ fun AppNavigation() {
         }
 
         composable("dashboard") {
+            // Ambil data dari kedua ViewModel
+            val registeredList  = formViewModel.registeredAnakList
+            val anakHadirSet   by anakViewModel.anakHadir.collectAsState()
+
+            val totalAnak  = registeredList.size
+            val jumlahHadir = anakHadirSet.size
+
             DashboardScreen(
+                totalAnak            = totalAnak,
+                anakHadir            = jumlahHadir,
                 onNavigateToDataAnak = { safeNavigate { navController.navigate("data_anak") { launchSingleTop = true } } },
                 onNavigateToLaporan  = { }
             )
@@ -93,15 +102,36 @@ fun AppNavigation() {
         }
 
         composable("pemeriksaan") {
+            val anak = selectedAnak.value
             PemeriksaanScreen(
-                onNavigateBack    = { navController.popBackStack() },
+                namaAnak         = anak?.nama         ?: "Michael Kwok",
+                umurBulan        = anak?.umurBulan    ?: 36,
+                jenisKelamin     = anak?.jenisKelamin ?: "Laki-laki",
+                onNavigateBack   = { navController.popBackStack() },
                 onNavigateToHasil = { },
-                onSimpan          = { bb, tb -> anakViewModel.simpanHasilPemeriksaan(bb, tb) }
+                // Terima HasilAnalisis dan simpan ke ViewModel
+                onSimpan = { bb, tb, analisis ->
+                    anakViewModel.simpanHasilPemeriksaan(bb, tb, analisis)
+                }
             )
         }
 
         composable("imunisasi") {
-            ImunisasiScreen(onNavigateBack = { navController.popBackStack() })
+            val anak     = selectedAnak.value
+            val namaAnak = anak?.nama ?: ""
+            // Ambil data vaksin yang sudah tersimpan untuk anak ini
+            val vaksinMap by anakViewModel.vaksinDiberikan.collectAsState()
+            val vaksinAnak = vaksinMap[namaAnak] ?: emptyMap()
+
+            ImunisasiScreen(
+                namaAnak      = namaAnak,
+                umurBulan     = anak?.umurBulan ?: 0,
+                onNavigateBack = { navController.popBackStack() },
+                vaksinAwal    = vaksinAnak,
+                onSimpanVaksin = { namaVaksin, tanggal ->
+                    anakViewModel.simpanVaksin(namaVaksin, tanggal)
+                }
+            )
         }
 
         composable("data_anak") {
@@ -193,15 +223,23 @@ fun AppNavigation() {
             val tb by anakViewModel.tinggiBadanTerakhir.collectAsState()
             val anak = selectedAnak.value
 
+            // Collect data yang dibutuhkan RiwayatScreen
+            val analisisMap  by anakViewModel.hasilAnalisis.collectAsState()
+            val vaksinMap    by anakViewModel.vaksinDiberikan.collectAsState()
+            val analisisAnak = analisisMap[namaAnak]
+            val vaksinAnak   = vaksinMap[namaAnak] ?: emptyMap()
+
             RiwayatScreen(
                 namaAnak                = namaAnak,
                 umurBulan               = anak?.umurBulan    ?: 0,
                 jenisKelamin            = anak?.jenisKelamin ?: "-",
                 beratBadanTerakhir      = bb,
                 tinggiBadanTerakhir     = tb,
+                hasilAnalisis           = analisisAnak,
+                vaksinDiberikan         = vaksinAnak,
                 onNavigateBack          = { navController.popBackStack() },
                 onNavigateToPemeriksaan = { safeNavigate { navController.navigate("pemeriksaan") { launchSingleTop = true } } },
-                onNavigateToImunisasi   = { safeNavigate { navController.navigate("imunisasi") { launchSingleTop = true } } }
+                onNavigateToImunisasi   = { safeNavigate { navController.navigate("imunisasi")   { launchSingleTop = true } } }
             )
         }
     }

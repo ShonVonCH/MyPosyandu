@@ -33,24 +33,20 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
 // ─────────────────────────────────────────────
-// Model
+//  Model
 // ─────────────────────────────────────────────
 
 data class AnakData(
     val nama         : String,
     val status       : String,
-    val tinggiBadan  : Int,      // nilai awal dari data dummy; bisa di-override oleh AnakViewModel
-    val beratBadan   : Int,      // sama ↑
+    val tinggiBadan  : Int,
+    val beratBadan   : Int,
     val umurBulan    : Int,
     val tanggal      : String,
     val namaOrangTua : String = "-",
-    val jenisKelamin : String = "-"   // "L" atau "P"
+    val jenisKelamin : String = "-"
 )
 
-/**
- * Hitung umur dalam bulan dari tanggal lahir (format "dd/MM/yyyy") ke hari ini.
- * Kembalikan 0 kalau format tidak dikenali.
- */
 fun hitungUmurBulan(tanggalLahir: String): Int {
     return try {
         val formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy")
@@ -62,10 +58,6 @@ fun hitungUmurBulan(tanggalLahir: String): Int {
     }
 }
 
-/**
- * Format tanggal "dd/MM/yyyy" → "MMM yyyy", misal "16/01/2026" → "Jan 2026".
- * Kembalikan string asli kalau format tidak dikenali.
- */
 fun formatTanggalSingkat(tanggalLahir: String): String {
     return try {
         val input  = DateTimeFormatter.ofPattern("dd/MM/yyyy")
@@ -76,35 +68,21 @@ fun formatTanggalSingkat(tanggalLahir: String): String {
     }
 }
 
-// ─────────────────────────────────────────────
-// Dummy data — P/L hardcode, umur hardcode
-// ─────────────────────────────────────────────
-
-private val dummyAnakList = listOf(
-    AnakData(nama = "Michael Kwok",  status = "Gizi Kurang", tinggiBadan = 85, beratBadan = 11, umurBulan = 36, tanggal = "Apr 2025", namaOrangTua = "Bapak Kwok",    jenisKelamin = "L"),
-    AnakData(nama = "Siti Rahayu",   status = "Normal",      tinggiBadan = 78, beratBadan = 9,  umurBulan = 24, tanggal = "Mar 2025", namaOrangTua = "Ibu Rahayu",    jenisKelamin = "P"),
-    AnakData(nama = "Budi Santoso",  status = "Stunting",    tinggiBadan = 70, beratBadan = 8,  umurBulan = 30, tanggal = "Feb 2025", namaOrangTua = "Bapak Santoso", jenisKelamin = "L"),
-    AnakData(nama = "Dewi Permata",  status = "Normal",      tinggiBadan = 90, beratBadan = 13, umurBulan = 42, tanggal = "Apr 2025", namaOrangTua = "Ibu Permata",   jenisKelamin = "P"),
-    AnakData(nama = "Rizky Pratama", status = "Gizi Buruk",  tinggiBadan = 65, beratBadan = 7,  umurBulan = 18, tanggal = "Jan 2025", namaOrangTua = "Bapak Pratama", jenisKelamin = "L"),
-    AnakData(nama = "Aulia Safitri", status = "Normal",      tinggiBadan = 95, beratBadan = 14, umurBulan = 48, tanggal = "Mar 2025", namaOrangTua = "Ibu Safitri",   jenisKelamin = "P")
-)
-
-// ─────────────────────────────────────────────
-// Screen
-// ─────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════
+//  SCREEN
+// ════════════════════════════════════════════════════════════
 
 @Composable
 fun DataAnakScreen(
-    anakList      : List<AnakData>     = dummyAnakList,
     viewModel     : FormDataViewModel? = null,
-    anakViewModel : AnakViewModel?     = null,   // ← untuk baca TB/BB terkini
+    anakViewModel : AnakViewModel?     = null,
     onTambahClick : () -> Unit         = {},
     onAnakClick   : (AnakData) -> Unit = {},
     onNavigateBack: () -> Unit         = {}
 ) {
-    // Gabungkan dummy list + anak baru dari viewModel
+    // Semua anak dari ViewModel (tidak ada dummy)
     val allAnakList = remember(viewModel?.registeredAnakList?.size) {
-        val tambahan = viewModel?.registeredAnakList?.map { entry ->
+        viewModel?.registeredAnakList?.map { entry ->
             val umur = hitungUmurBulan(entry.formAnak.tanggalLahir)
             AnakData(
                 nama         = entry.formAnak.namaLengkap,
@@ -121,10 +99,9 @@ fun DataAnakScreen(
                 }
             )
         } ?: emptyList()
-        anakList + tambahan
     }
 
-    // Observasi map hasil pemeriksaan dari AnakViewModel agar list auto-refresh
+    // Auto-refresh saat hasil pemeriksaan berubah
     val hasilPemeriksaan by (anakViewModel?.hasilPemeriksaan
         ?: kotlinx.coroutines.flow.MutableStateFlow(emptyMap())
             ).collectAsState()
@@ -161,17 +138,35 @@ fun DataAnakScreen(
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
-            items(filteredList) { anak ->
-                // Override TB/BB dari hasil pemeriksaan terbaru (kalau ada)
-                val bbTerkini = hasilPemeriksaan[anak.nama]?.first
-                val tbTerkini = hasilPemeriksaan[anak.nama]?.second
-                val tampilBB  = if (!bbTerkini.isNullOrBlank()) bbTerkini.toDoubleOrNull()?.toInt() ?: anak.beratBadan else anak.beratBadan
-                val tampilTB  = if (!tbTerkini.isNullOrBlank()) tbTerkini.toDoubleOrNull()?.toInt() ?: anak.tinggiBadan else anak.tinggiBadan
+            if (allAnakList.isEmpty()) {
+                item {
+                    Box(
+                        modifier         = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 48.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text      = "Belum ada anak terdaftar.\nTekan \"Tambah Anak Baru\" untuk mulai.",
+                            color     = TextGrey,
+                            fontSize  = 14.sp,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 22.sp
+                        )
+                    }
+                }
+            } else {
+                items(filteredList) { anak ->
+                    val bbTerkini = hasilPemeriksaan[anak.nama]?.first
+                    val tbTerkini = hasilPemeriksaan[anak.nama]?.second
+                    val tampilBB  = bbTerkini?.toDoubleOrNull()?.toInt() ?: anak.beratBadan
+                    val tampilTB  = tbTerkini?.toDoubleOrNull()?.toInt() ?: anak.tinggiBadan
 
-                AnakListItem(
-                    data    = anak.copy(beratBadan = tampilBB, tinggiBadan = tampilTB),
-                    onClick = { onAnakClick(anak) }
-                )
+                    AnakListItem(
+                        data    = anak.copy(beratBadan = tampilBB, tinggiBadan = tampilTB),
+                        onClick = { onAnakClick(anak) }
+                    )
+                }
             }
 
             item { Spacer(modifier = Modifier.height(16.dp)) }
@@ -188,9 +183,9 @@ fun DataAnakScreen(
     }
 }
 
-// ─────────────────────────────────────────────
-// Header
-// ─────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════
+//  HEADER
+// ════════════════════════════════════════════════════════════
 
 @Composable
 fun DataAnakHeader(jumlahAnak: Int, onBack: () -> Unit) {
@@ -243,9 +238,9 @@ fun DataAnakHeader(jumlahAnak: Int, onBack: () -> Unit) {
     }
 }
 
-// ─────────────────────────────────────────────
-// Search Bar
-// ─────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════
+//  SEARCH BAR
+// ════════════════════════════════════════════════════════════
 
 @Composable
 fun SearchBarSection(
@@ -258,11 +253,8 @@ fun SearchBarSection(
         onValueChange = onQueryChange,
         singleLine    = true,
         cursorBrush   = SolidColor(AccentGreen),
-        textStyle     = TextStyle(
-            color    = TextWhite,
-            fontSize = 14.sp
-        ),
-        modifier = modifier
+        textStyle     = TextStyle(color = TextWhite, fontSize = 14.sp),
+        modifier      = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(SurfaceDark)
@@ -280,11 +272,7 @@ fun SearchBarSection(
                 )
                 Box(modifier = Modifier.weight(1f)) {
                     if (query.isEmpty()) {
-                        Text(
-                            text     = "Cari nama balita..",
-                            color    = TextGrey,
-                            fontSize = 14.sp
-                        )
+                        Text(text = "Cari nama balita..", color = TextGrey, fontSize = 14.sp)
                     }
                     innerTextField()
                 }
@@ -293,9 +281,9 @@ fun SearchBarSection(
     )
 }
 
-// ─────────────────────────────────────────────
-// List Item
-// ─────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════
+//  LIST ITEM
+// ════════════════════════════════════════════════════════════
 
 @Composable
 fun AnakListItem(
@@ -327,8 +315,6 @@ fun AnakListItem(
             )
 
             Column(modifier = Modifier.weight(1f)) {
-
-                // Nama + badge gender
                 Row(
                     verticalAlignment     = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -360,11 +346,10 @@ fun AnakListItem(
                 Text(text = data.status, color = TextGrey, fontSize = 13.sp)
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text     = "TB: ${if (data.tinggiBadan > 0) "${data.tinggiBadan} cm" else "–"}  " +
+                    text  = "TB: ${if (data.tinggiBadan > 0) "${data.tinggiBadan} cm" else "–"}  " +
                             "BB: ${if (data.beratBadan  > 0) "${data.beratBadan} kg"  else "–"}  " +
                             "Umur: ${data.umurBulan} bln",
-                    color    = TextGrey,
-                    fontSize = 12.sp
+                    color = TextGrey, fontSize = 12.sp
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(text = "Ortu: ${data.namaOrangTua}", color = TextGrey, fontSize = 12.sp)
@@ -382,15 +367,12 @@ fun AnakListItem(
     Divider(color = SurfaceDarkBorder, thickness = 0.8.dp)
 }
 
-// ─────────────────────────────────────────────
-// Tombol Tambah
-// ─────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════
+//  TOMBOL TAMBAH
+// ════════════════════════════════════════════════════════════
 
 @Composable
-fun TambahAnakButton(
-    onClick : () -> Unit,
-    modifier: Modifier = Modifier
-) {
+fun TambahAnakButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -421,9 +403,9 @@ fun TambahAnakButton(
     }
 }
 
-// ─────────────────────────────────────────────
-// Preview
-// ─────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════
+//  PREVIEW
+// ════════════════════════════════════════════════════════════
 
 @Preview(showBackground = true, showSystemUi = true, backgroundColor = 0xFF121212)
 @Composable
