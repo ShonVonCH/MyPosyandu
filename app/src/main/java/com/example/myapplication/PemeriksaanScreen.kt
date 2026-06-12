@@ -33,7 +33,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.Dp
+import android.app.DatePickerDialog
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material.icons.filled.CalendarMonth
+import java.util.Calendar
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.abs
@@ -85,137 +88,6 @@ data class HasilAnalisis(
 
 enum class StatusWarna { NORMAL, WARN, DANGER }
 
-private val tabelTBU_LakiLaki = mapOf(
-    0  to Pair(49.9, 1.9),  6  to Pair(67.6, 2.5),
-    12 to Pair(75.7, 2.7),  18 to Pair(82.3, 2.9),
-    24 to Pair(87.8, 3.1),  30 to Pair(92.7, 3.3),
-    36 to Pair(96.1, 3.5),  42 to Pair(99.9, 3.6),
-    48 to Pair(103.3, 3.7), 54 to Pair(106.4, 3.8),
-    60 to Pair(110.0, 4.0)
-)
-
-private val tabelTBU_Perempuan = mapOf(
-    0  to Pair(49.1, 1.9),  6  to Pair(65.7, 2.5),
-    12 to Pair(74.0, 2.7),  18 to Pair(80.7, 2.9),
-    24 to Pair(86.4, 3.1),  30 to Pair(91.2, 3.3),
-    36 to Pair(95.1, 3.5),  42 to Pair(98.7, 3.6),
-    48 to Pair(102.7, 3.7), 54 to Pair(105.9, 3.8),
-    60 to Pair(109.4, 4.0)
-)
-
-private val tabelBBU_LakiLaki = mapOf(
-    0  to Pair(3.3, 0.45),  6  to Pair(7.9, 0.90),
-    12 to Pair(9.6, 1.05),  18 to Pair(11.1, 1.18),
-    24 to Pair(12.2, 1.30), 30 to Pair(13.3, 1.42),
-    36 to Pair(14.3, 1.53), 42 to Pair(15.3, 1.64),
-    48 to Pair(16.3, 1.75), 54 to Pair(17.3, 1.87),
-    60 to Pair(18.3, 2.00)
-)
-
-private val tabelBBU_Perempuan = mapOf(
-    0  to Pair(3.2, 0.43),  6  to Pair(7.3, 0.85),
-    12 to Pair(8.9, 1.00),  18 to Pair(10.2, 1.12),
-    24 to Pair(11.5, 1.24), 30 to Pair(12.7, 1.37),
-    36 to Pair(13.9, 1.49), 42 to Pair(15.0, 1.61),
-    48 to Pair(16.1, 1.73), 54 to Pair(17.2, 1.86),
-    60 to Pair(18.2, 1.98)
-)
-
-private fun interpolasi(umur: Int, tabel: Map<Int, Pair<Double, Double>>): Pair<Double, Double> {
-    val keys = tabel.keys.sorted()
-    val lower = keys.lastOrNull { it <= umur } ?: keys.first()
-    val upper = keys.firstOrNull { it >= umur } ?: keys.last()
-    if (lower == upper) return tabel[lower]!!
-    val (medLow, sdLow) = tabel[lower]!!
-    val (medUp,  sdUp)  = tabel[upper]!!
-    val ratio = (umur - lower).toDouble() / (upper - lower)
-    return Pair(
-        medLow + ratio * (medUp - medLow),
-        sdLow  + ratio * (sdUp  - sdLow)
-    )
-}
-
-fun hitungZScore(nilai: Double, median: Double, sd: Double): Double =
-    (nilai - median) / sd
-
-fun analisisWHO(
-    tinggiBadan : Double,
-    beratBadan  : Double,
-    umurBulan   : Int,
-    jenisKelamin: String
-): HasilAnalisis {
-    val isLaki = jenisKelamin.contains("Laki", ignoreCase = true)
-
-    val (medTB, sdTB) = interpolasi(umurBulan, if (isLaki) tabelTBU_LakiLaki else tabelTBU_Perempuan)
-    val (medBB, sdBB) = interpolasi(umurBulan, if (isLaki) tabelBBU_LakiLaki else tabelBBU_Perempuan)
-
-    val zTBU = hitungZScore(tinggiBadan, medTB, sdTB)
-    val zBBU = hitungZScore(beratBadan,  medBB, sdBB)
-
-    val (statusTBU, warnaTBU, saranTBU) = when {
-        zTBU < -3.0 -> Triple(
-            "Sangat Pendek",
-            StatusWarna.DANGER,
-            "Anak mengalami stunting berat. Segera rujuk ke tenaga kesehatan dan tingkatkan asupan gizi."
-        )
-        zTBU < -2.0 -> Triple(
-            "Pendek (Stunting)",
-            StatusWarna.WARN,
-            "Anak berisiko stunting. Pantau pertumbuhan rutin dan perbaiki pola makan bergizi seimbang."
-        )
-        zTBU > 3.0  -> Triple(
-            "Sangat Tinggi",
-            StatusWarna.WARN,
-            "Tinggi badan di atas rata-rata. Pantau kondisi kesehatan secara berkala."
-        )
-        else -> Triple(
-            "Normal",
-            StatusWarna.NORMAL,
-            "Tinggi badan sesuai usia. Pertahankan pola makan dan stimulasi tumbuh kembang."
-        )
-    }
-
-    // Obesitas check must come before Gizi Lebih (more specific)
-    val (statusBBU, warnaBBU, saranBBU) = when {
-        zBBU < -3.0 -> Triple(
-            "Gizi Buruk",
-            StatusWarna.DANGER,
-            "Anak mengalami gizi buruk. Segera rujuk ke puskesmas untuk tata laksana gizi buruk."
-        )
-        zBBU < -2.0 -> Triple(
-            "Gizi Kurang",
-            StatusWarna.WARN,
-            "Berat badan di bawah normal. Tingkatkan asupan kalori dan protein, pantau setiap bulan."
-        )
-        zBBU > 3.0  -> Triple(
-            "Obesitas",
-            StatusWarna.DANGER,
-            "Anak mengalami obesitas. Konsultasikan ke dokter untuk penanganan lebih lanjut."
-        )
-        zBBU > 2.0  -> Triple(
-            "Gizi Lebih",
-            StatusWarna.WARN,
-            "Berat badan di atas normal. Perhatikan pola makan dan aktivitas fisik anak."
-        )
-        else -> Triple(
-            "Gizi Baik",
-            StatusWarna.NORMAL,
-            "Berat badan sesuai usia. Pertahankan pola makan bergizi dan aktivitas fisik."
-        )
-    }
-
-    return HasilAnalisis(
-        zScoreTBU  = (zTBU * 100).roundToInt() / 100.0,
-        zScoreBBU  = (zBBU * 100).roundToInt() / 100.0,
-        statusTBU  = statusTBU,
-        statusBBU  = statusBBU,
-        warnasTBU  = warnaTBU,
-        warnasBBU  = warnaBBU,
-        saranTBU   = saranTBU,
-        saranBBU   = saranBBU
-    )
-}
-
 fun zScoreToProgress(z: Double): Float = ((z + 4.0) / 8.0).coerceIn(0.0, 1.0).toFloat()
 
 fun statusToProgressColor(warna: StatusWarna) = when (warna) {
@@ -231,13 +103,13 @@ fun statusToProgressColor(warna: StatusWarna) = when (warna) {
 // Ubah parameter onSimpan di PemeriksaanScreen
 @Composable
 fun PemeriksaanScreen(
-    namaAnak         : String = "Michael Kwok",
-    umurBulan        : Int    = 36,
-    jenisKelamin     : String = "Laki-laki",
-    onNavigateBack   : () -> Unit = {},
-    onNavigateToHasil: () -> Unit = {},
-    // Tambah HasilAnalisis ke callback
-    onSimpan: (beratBadan: String, tinggiBadan: String, analisis: HasilAnalisis) -> Unit = { _, _, _ -> }
+    anakId         : String   = "",
+    kaderId        : String   = "",
+    namaAnak       : String   = "",
+    umurBulan      : Int      = 0,
+    jenisKelamin   : String   = "",
+    onNavigateBack : () -> Unit = {},
+    onSimpan       : (beratBadan: String, tinggiBadan: String, analisis: HasilAnalisis) -> Unit = { _, _, _ -> }
 ) {
     var beratBadan    by remember { mutableStateOf("") }
     var tinggiBadan   by remember { mutableStateOf("") }
@@ -246,7 +118,7 @@ fun PemeriksaanScreen(
     var tanggal       by remember { mutableStateOf("26/05/2025") }
     var activeTab     by remember { mutableStateOf(0) }
     var hasil         by remember { mutableStateOf<HasilAnalisis?>(null) }
-
+    val context = LocalContext.current
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -281,11 +153,37 @@ fun PemeriksaanScreen(
                         val tb = tinggiBadan.toDoubleOrNull()
                         val bb = beratBadan.toDoubleOrNull()
                         if (tb != null && bb != null) {
-                            val analisis  = analisisWHO(tb, bb, umurBulan, jenisKelamin)
-                            hasil         = analisis
-                            activeTab     = 1
-                            // Kirim termasuk objek analisis
+                            val analisis = analisisWHO(tb, bb, umurBulan, jenisKelamin)
+                            hasil        = analisis
+                            activeTab    = 1
                             onSimpan(beratBadan, tinggiBadan, analisis)
+
+                            // ── Simpan ke tabel anak_pemeriksaan ──────────────────
+                            val repo = PemeriksaanRepository(context)
+
+                            // Map statusBBU ke nilai yang diterima DB CHECK constraint
+                            val statusGiziDb = when (analisis.statusBBU.lowercase().trim()) {
+                                "gizi buruk"                    -> "gizi_buruk"
+                                "gizi kurang"                   -> "gizi_kurang"
+                                "gizi lebih"                    -> "gizi_lebih"
+                                "obesitas"                      -> "obesitas"
+                                else                            -> "normal"  // "Gizi Baik" / "Normal"
+                            }
+
+                            repo.insertPemeriksaan(
+                                id         = java.util.UUID.randomUUID().toString(),
+                                anakId     = anakId,
+                                kaderId    = kaderId,
+                                tgl        = tanggal,
+                                bb         = beratBadan.toDoubleOrNull() ?: 0.0,
+                                tb         = tinggiBadan.toDoubleOrNull() ?: 0.0,
+                                lk         = lingkarKepala.toDoubleOrNull() ?: 0.0,
+                                ll         = lingkarLengan.toDoubleOrNull() ?: 0.0,
+                                zScoreTbu  = analisis.zScoreTBU,
+                                zScoreBbu  = analisis.zScoreBBU,
+                                statusGizi = statusGiziDb,
+                                catatan    = ""
+                            )
                         }
                     }
                 )
@@ -1127,16 +1025,66 @@ fun TanggalCard(
     onTanggalChange : (String) -> Unit,
     modifier        : Modifier = Modifier
 ) {
+    val context = LocalContext.current
+
+    // Parse tanggal existing ke Calendar (format dd/MM/yyyy)
+    val calendar = remember {
+        Calendar.getInstance().also { cal ->
+            runCatching {
+                val parts = tanggal.split("/")
+                if (parts.size == 3) {
+                    cal.set(parts[2].toInt(), parts[1].toInt() - 1, parts[0].toInt())
+                }
+            }
+        }
+    }
+
+    val datePickerDialog = remember {
+        DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                val formatted = "%02d/%02d/%04d".format(dayOfMonth, month + 1, year)
+                onTanggalChange(formatted)
+                calendar.set(year, month, dayOfMonth)
+            },
+            calendar.get(Calendar.YEAR),
+            calendar.get(Calendar.MONTH),
+            calendar.get(Calendar.DAY_OF_MONTH)
+        )
+    }
+
     PemeriksaanCardContainer(modifier = modifier) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(text = "Tanggal Pemeriksaan", color = TextGrey, fontSize = 13.sp)
-            PemeriksaanInputBox(
-                value         = tanggal,
-                onValueChange = onTanggalChange,
-                placeholder   = "dd/mm/yyyy",
-                keyboardType  = KeyboardType.Number,
-                modifier      = Modifier.fillMaxWidth().height(48.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF3A3A3A))
+                    .border(1.dp, Color(0xFF555555), RoundedCornerShape(8.dp))
+                    .clickable { datePickerDialog.show() }
+                    .padding(horizontal = 12.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Row(
+                    modifier              = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment     = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text     = if (tanggal.isNotEmpty()) tanggal else "dd/mm/yyyy",
+                        color    = if (tanggal.isNotEmpty()) TextWhite else Color(0xFF6B6B6B),
+                        fontSize = 14.sp
+                    )
+                    Icon(
+                        imageVector        = Icons.Default.CalendarMonth,
+                        contentDescription = "Pilih tanggal",
+                        tint               = Color(0xFFAAAAAA),
+                        modifier           = Modifier.size(18.dp)
+                    )
+                }
+            }
         }
     }
 }

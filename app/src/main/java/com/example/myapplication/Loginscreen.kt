@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -28,78 +29,124 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
 
-// ─────────────────────────────────────────────────────────────
-//  Local colours
-// ─────────────────────────────────────────────────────────────
-private val RoleSelectedBg   = Color(0xFFB8EDD8)   // mint – active role card bg
-private val RoleSelectedText = Color(0xFF1E6B4E)   // dark green – active role text
+private val RoleSelectedBg   = Color(0xFFB8EDD8)
+private val RoleSelectedText = Color(0xFF1E6B4E)
 private val RoleIdleText     = TextWhite
 private val InputOutline     = Color(0xFF555555)
 private val InputLabelColor  = Color(0xFFAAAAAA)
-private val KaderIconTeal    = Color(0xFF3DB89C)   // teal icon on Kader card
-private val OrangTuaIconBlue = Color(0xFF4A90D9)   // blue icon on Orang Tua card
-private val LogoBoxBg        = Color(0xFF7ECFB0)   // mint rounded-square logo bg
-
-// ════════════════════════════════════════════════════════════
-//  SCREEN ENTRY POINT
-// ════════════════════════════════════════════════════════════
+private val KaderIconTeal    = Color(0xFF3DB89C)
+private val OrangTuaIconBlue = Color(0xFF4A90D9)
+private val LogoBoxBg        = Color(0xFF7ECFB0)
 
 @Composable
-fun LoginScreen(onNavigateToDashboard: (String) -> Unit = {}) {
+fun LoginScreen(
+    formViewModel            : FormDataViewModel = viewModel(),
+    onNavigateToDashboard    : (String) -> Unit  = {},
+    onNavigateToDashboardOrtu: (String) -> Unit  = {}
+) {
+    val context = LocalContext.current
+    val scope   = rememberCoroutineScope()
 
-    // ── State ────────────────────────────────────────────────
     var selectedRole by remember { mutableStateOf("kader") }
     var username     by remember { mutableStateOf("") }
     var password     by remember { mutableStateOf("") }
-    // ────────────────────────────────────────────────────────
+    var loginError   by remember { mutableStateOf("") }
+    var isLoading    by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(BackgroundDark)
             .verticalScroll(rememberScrollState())
-            .statusBarsPadding()         // ← ikuti tinggi status bar
-            .padding(top = 24.dp)        // ← tambahan ruang di bawah status bar
+            .statusBarsPadding()
+            .padding(top = 24.dp)
     ) {
-        // ── Logo / branding block ────────────────────────────
         LoginHeader()
-
         Spacer(modifier = Modifier.height(36.dp))
-
-        // ── Role selection ────────────────────────────────────
         RoleSelection(
             selectedRole   = selectedRole,
-            onRoleSelected = { selectedRole = it },
+            onRoleSelected = { selectedRole = it; loginError = "" },
             modifier       = Modifier.padding(horizontal = 20.dp)
         )
-
         Spacer(modifier = Modifier.height(28.dp))
-
-        // ── Input form ────────────────────────────────────────
         LoginForm(
-            username        = username,
-            onUsernameChange = { username = it },
-            password        = password,
-            onPasswordChange = { password = it },
-            modifier        = Modifier.padding(horizontal = 20.dp)
+            username         = username,
+            onUsernameChange = { username = it; loginError = "" },
+            password         = password,
+            onPasswordChange = { password = it; loginError = "" },
+            modifier         = Modifier.padding(horizontal = 20.dp)
         )
-
         Spacer(modifier = Modifier.height(28.dp))
-
-        // ── CTA button ────────────────────────────────────────
         LoginButton(
-            onClick  = { onNavigateToDashboard(selectedRole) },
+            isLoading = isLoading,
+            onClick   = {
+                if (isLoading) return@LoginButton
+
+                val usernameInput = username.trim()
+                val passwordInput = password.trim()
+                val roleInput     = if (selectedRole == "kader") "kader" else "orangtua"
+
+                if (usernameInput.isBlank() || passwordInput.isBlank()) {
+                    loginError = "Username dan password tidak boleh kosong"
+                    return@LoginButton
+                }
+
+                isLoading  = true
+                loginError = ""
+
+                scope.launch {
+                    try {
+                        // context dikirim ke fetchLoginFromApi untuk simpan user ke SQLite
+                        val user = fetchLoginFromApi(usernameInput, passwordInput, roleInput, context)
+
+                        if (user != null) {
+                            // Sync data posyandu, jadwal, vaksin referensi ke SQLite lokal
+                            try {
+                                SyncPosyandu.syncAll(context)
+                                android.util.Log.d("SYNC", "Sync berhasil")
+                            } catch (e: Exception) {
+                                android.util.Log.e("SYNC", "Gagal sync: ${e.message}", e)
+                            }
+
+                            if (selectedRole == "kader") {
+                                formViewModel.loggedInKaderId = user.id
+                                onNavigateToDashboard(user.username)
+                            } else {
+                                formViewModel.loggedInOrangTuaUsername = user.username
+                                onNavigateToDashboardOrtu(user.username)
+                            }
+
+                        } else {
+                            loginError = "Username, password, atau role salah"
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("LOGIN_DEBUG", "Error: ${e.message}", e)
+                        loginError = "Gagal terhubung ke server"
+                    } finally {
+                        isLoading = false
+                    }
+                }
+            },
             modifier = Modifier.padding(horizontal = 20.dp)
         )
 
+        if (loginError.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text     = loginError,
+                color    = Color(0xFFFF6B6B),
+                fontSize = 13.sp,
+                modifier = Modifier.padding(horizontal = 20.dp)
+            )
+        }
         Spacer(modifier = Modifier.height(40.dp))
     }
 }
 
-// ════════════════════════════════════════════════════════════
-//  1. HEADER  —  thin green strip + rounded-square logo + title
-// ════════════════════════════════════════════════════════════
+// ── Header ────────────────────────────────────────────────────────────────────
 
 @Composable
 fun LoginHeader() {
@@ -107,7 +154,6 @@ fun LoginHeader() {
         modifier            = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Rounded-square mint logo box with stethoscope icon
         Box(
             modifier = Modifier
                 .size(76.dp)
@@ -115,26 +161,14 @@ fun LoginHeader() {
                 .background(LogoBoxBg),
             contentAlignment = Alignment.Center
         ) {
-            // ── ICON SLOT ─────────────────────────────────────
-            // Replace with your actual stethoscope drawable:
-            //   Icon(
-            //       painter = painterResource(R.drawable.ic_stethoscope),
-            //       contentDescription = "Logo",
-            //       tint = Color(0xFF1E6B4E),
-            //       modifier = Modifier.size(42.dp)
-            //   )
             Icon(
                 imageVector        = Icons.Default.MedicalServices,
                 contentDescription = "Logo",
                 tint               = Color(0xFF1E6B4E),
                 modifier           = Modifier.size(40.dp)
             )
-            // ── END ICON SLOT ─────────────────────────────────
         }
-
         Spacer(modifier = Modifier.height(16.dp))
-
-        // App title
         Text(
             text       = "MyPosyandu",
             color      = TextWhite,
@@ -142,14 +176,11 @@ fun LoginHeader() {
             fontWeight = FontWeight.Bold,
             textAlign  = TextAlign.Center
         )
-
         Spacer(modifier = Modifier.height(4.dp))
     }
 }
 
-// ════════════════════════════════════════════════════════════
-//  2. ROLE SELECTION
-// ════════════════════════════════════════════════════════════
+// ── Role Selection ────────────────────────────────────────────────────────────
 
 @Composable
 fun RoleSelection(
@@ -158,13 +189,7 @@ fun RoleSelection(
     modifier      : Modifier = Modifier
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(
-            text       = "Masuk Sebagai",
-            color      = TextWhite,
-            fontSize   = 15.sp,
-            fontWeight = FontWeight.Bold
-        )
-
+        Text("Masuk Sebagai", color = TextWhite, fontSize = 15.sp, fontWeight = FontWeight.Bold)
         Row(
             modifier              = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -214,9 +239,9 @@ private fun RoleCard(
             .clip(RoundedCornerShape(14.dp))
             .background(cardBg)
             .border(
-                width  = 1.dp,
-                color  = if (isSelected) MenuMintBorder else SurfaceDarkBorder,
-                shape  = RoundedCornerShape(14.dp)
+                width = 1.dp,
+                color = if (isSelected) MenuMintBorder else SurfaceDarkBorder,
+                shape = RoundedCornerShape(14.dp)
             )
             .clickable { onSelected(roleKey) }
             .padding(vertical = 18.dp, horizontal = 12.dp),
@@ -226,32 +251,15 @@ private fun RoleCard(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Icon(
-                imageVector        = icon,
-                contentDescription = label,
-                tint               = iconTint,
-                modifier           = Modifier.size(30.dp)
-            )
-            Text(
-                text       = label,
-                color      = textColor,
-                fontSize   = 14.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign  = TextAlign.Center
-            )
-            Text(
-                text      = subLabel,
-                color     = subColor,
-                fontSize  = 11.sp,
-                textAlign = TextAlign.Center
-            )
+            Icon(icon, label, tint = iconTint, modifier = Modifier.size(30.dp))
+            Text(label,    color = textColor, fontSize = 14.sp,
+                fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+            Text(subLabel, color = subColor,  fontSize = 11.sp, textAlign = TextAlign.Center)
         }
     }
 }
 
-// ════════════════════════════════════════════════════════════
-//  3. LOGIN FORM
-// ════════════════════════════════════════════════════════════
+// ── Login Form ────────────────────────────────────────────────────────────────
 
 @Composable
 fun LoginForm(
@@ -263,20 +271,20 @@ fun LoginForm(
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         LoginInputField(
-            label        = "Username",
-            value        = username,
+            label         = "Username",
+            value         = username,
             onValueChange = onUsernameChange,
-            placeholder  = "Username..",
-            leadingIcon  = Icons.Default.Person,
-            isPassword   = false
+            placeholder   = "Username..",
+            leadingIcon   = Icons.Default.Person,
+            isPassword    = false
         )
         LoginInputField(
-            label        = "Password",
-            value        = password,
+            label         = "Password",
+            value         = password,
             onValueChange = onPasswordChange,
-            placeholder  = "Password..",
-            leadingIcon  = Icons.Default.Lock,
-            isPassword   = true
+            placeholder   = "Password..",
+            leadingIcon   = Icons.Default.Lock,
+            isPassword    = true
         )
     }
 }
@@ -287,83 +295,75 @@ private fun LoginInputField(
     value        : String,
     onValueChange: (String) -> Unit,
     placeholder  : String,
-    leadingIcon  : ImageVector,   // kept in signature for backward-compat, not rendered
+    leadingIcon  : ImageVector,
     isPassword   : Boolean,
     modifier     : Modifier = Modifier
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(
-            text     = label,
-            color    = InputLabelColor,
-            fontSize = 13.sp
-        )
+        Text(label, color = InputLabelColor, fontSize = 13.sp)
         OutlinedTextField(
             value         = value,
             onValueChange = onValueChange,
             modifier      = Modifier.fillMaxWidth(),
-            placeholder   = {
-                Text(text = placeholder, color = InputLabelColor, fontSize = 14.sp)
+            placeholder   = { Text(placeholder, color = InputLabelColor, fontSize = 14.sp) },
+            leadingIcon   = {
+                Icon(leadingIcon, null, tint = InputLabelColor, modifier = Modifier.size(20.dp))
             },
-            singleLine            = true,
-            visualTransformation  = if (isPassword) PasswordVisualTransformation()
-                                    else VisualTransformation.None,
-            keyboardOptions       = KeyboardOptions(
+            singleLine           = true,
+            visualTransformation = if (isPassword) PasswordVisualTransformation()
+            else VisualTransformation.None,
+            keyboardOptions      = KeyboardOptions(
                 keyboardType = if (isPassword) KeyboardType.Password else KeyboardType.Text
             ),
             shape  = RoundedCornerShape(10.dp),
             colors = TextFieldDefaults.outlinedTextFieldColors(
-                textColor              = TextWhite,
-                cursorColor            = AccentGreen,
-                focusedBorderColor     = InputOutline,
-                unfocusedBorderColor   = InputOutline,
-                backgroundColor        = BackgroundDark,
-                placeholderColor       = InputLabelColor,
-                focusedLabelColor      = AccentGreen,
-                unfocusedLabelColor    = InputLabelColor
+                textColor            = TextWhite,
+                cursorColor          = AccentGreen,
+                focusedBorderColor   = InputOutline,
+                unfocusedBorderColor = InputOutline,
+                backgroundColor      = BackgroundDark,
+                placeholderColor     = InputLabelColor,
+                leadingIconColor     = InputLabelColor
             )
         )
     }
 }
 
-// ════════════════════════════════════════════════════════════
-//  4. LOGIN BUTTON
-// ════════════════════════════════════════════════════════════
+// ── Login Button ──────────────────────────────────────────────────────────────
 
 @Composable
 fun LoginButton(
-    onClick : () -> Unit,
-    modifier: Modifier = Modifier
+    onClick  : () -> Unit,
+    isLoading: Boolean  = false,
+    modifier : Modifier = Modifier
 ) {
     Box(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(BackgroundDark)
-            .border(
-                width  = 1.dp,
-                color  = TextWhite,
-                shape  = RoundedCornerShape(14.dp)
-            )
-            .clickable(onClick = onClick)
+            .background(if (isLoading) Color(0xFF333333) else BackgroundDark)
+            .border(1.dp, if (isLoading) Color(0xFF555555) else TextWhite, RoundedCornerShape(14.dp))
+            .clickable { onClick() }
             .padding(vertical = 16.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text       = "Masuk",
-            color      = TextWhite,
-            fontSize   = 16.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign  = TextAlign.Center
-        )
+        if (isLoading) {
+            CircularProgressIndicator(
+                color       = AccentGreen,
+                modifier    = Modifier.size(20.dp),
+                strokeWidth = 2.dp
+            )
+        } else {
+            Text(
+                text       = "Masuk",
+                color      = TextWhite,
+                fontSize   = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
     }
 }
 
-// ════════════════════════════════════════════════════════════
-//  PREVIEW
-// ════════════════════════════════════════════════════════════
-
 @Preview(showBackground = true, showSystemUi = true, backgroundColor = 0xFF121212)
 @Composable
-fun LoginScreenPreview() {
-    LoginScreen()
-}
+fun LoginScreenPreview() { LoginScreen() }

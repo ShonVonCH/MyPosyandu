@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -56,42 +55,34 @@ private val FieldBorder        = Color(0xFF555555)
 private val LabelColor         = Color(0xFFAAAAAA)
 
 // ─────────────────────────────────────────────────────────────
-//  Jadwal vaksin posyandu 0–24 bulan
-//  key  = usia dalam bulan (0 = lahir)
-//  name = nama vaksin
+//  Helper: hitung tanggal batas dari tgl lahir + batas bulan
 // ─────────────────────────────────────────────────────────────
-data class JadwalVaksin(
-    val usiaBulan : Int,
-    val namaVaksin: String
-)
+private fun hitungTanggalBatas(tglLahir: String, batasBulan: Int): String {
+    // tglLahir format: yyyy-MM-dd atau dd/MM/yyyy
+    return try {
+        val parts = if (tglLahir.contains("-")) tglLahir.split("-")
+        else tglLahir.split("/").let { listOf(it[2], it[1], it[0]) }
+        val cal = Calendar.getInstance()
+        cal.set(parts[0].toInt(), parts[1].toInt() - 1, parts[2].toInt())
+        cal.add(Calendar.MONTH, batasBulan)
+        "%02d/%02d/%04d".format(
+            cal.get(Calendar.DAY_OF_MONTH),
+            cal.get(Calendar.MONTH) + 1,
+            cal.get(Calendar.YEAR)
+        )
+    } catch (e: Exception) { "" }
+}
 
-val jadwalVaksinPosyandu: List<JadwalVaksin> = listOf(
-    JadwalVaksin(0,  "Hepatitis B (HB-0)"),
-    JadwalVaksin(0,  "Polio 0 (OPV)"),
-    JadwalVaksin(1,  "BCG"),
-    JadwalVaksin(1,  "Polio 1"),
-    JadwalVaksin(2,  "DPT-HB-Hib 1"),
-    JadwalVaksin(2,  "Polio 2"),
-    JadwalVaksin(2,  "PCV 1"),
-    JadwalVaksin(3,  "DPT-HB-Hib 2"),
-    JadwalVaksin(3,  "Polio 3"),
-    JadwalVaksin(3,  "PCV 2"),
-    JadwalVaksin(4,  "DPT-HB-Hib 3"),
-    JadwalVaksin(4,  "Polio 4 (IPV)"),
-    JadwalVaksin(9,  "Campak-Rubella (MR) 1"),
-    JadwalVaksin(9,  "Yellow Fever"),
-    JadwalVaksin(12, "PCV 3"),
-    JadwalVaksin(18, "DPT-HB-Hib 4 (Booster)"),
-    JadwalVaksin(18, "Campak-Rubella (MR) 2"),
-    JadwalVaksin(24, "Hepatitis A"),
-    JadwalVaksin(24, "Tifoid")
-)
-
-// ─────────────────────────────────────────────────────────────
-//  State vaksin yang sudah diberikan: Map<namaVaksin, tanggal>
-// ─────────────────────────────────────────────────────────────
-// Diletakkan di ViewModel-level di produksi; di sini pakai
-// remember di screen supaya data survive selama sesi imunisasi.
+private fun isTerlambat(tglLahir: String, batasBulan: Int): Boolean {
+    return try {
+        val parts = if (tglLahir.contains("-")) tglLahir.split("-")
+        else tglLahir.split("/").let { listOf(it[2], it[1], it[0]) }
+        val cal = Calendar.getInstance()
+        cal.set(parts[0].toInt(), parts[1].toInt() - 1, parts[2].toInt())
+        cal.add(Calendar.MONTH, batasBulan)
+        Calendar.getInstance().after(cal)
+    } catch (e: Exception) { false }
+}
 
 // ════════════════════════════════════════════════════════════
 //  SCREEN ENTRY POINT
@@ -99,16 +90,29 @@ val jadwalVaksinPosyandu: List<JadwalVaksin> = listOf(
 
 @Composable
 fun ImunisasiScreen(
-    namaAnak      : String = "Michael Kwok",
-    umurBulan     : Int    = 36,
-    onNavigateBack: () -> Unit = {},
-    // Map vaksin awal dari ViewModel + callback simpan
+    namaAnak      : String              = "",
+    namaOrtu      : String              = "",
+    nikAnak       : String              = "",   // = anakId
+    tglLahirAnak  : String              = "",   // untuk hitung batas terlambat
+    umurBulan     : Int                 = 0,
+    kaderId       : String              = "",
+    onNavigateBack: () -> Unit          = {},
     vaksinAwal    : Map<String, String> = emptyMap(),
     onSimpanVaksin: (namaVaksin: String, tanggal: String) -> Unit = { _, _ -> }
 ) {
-    // Inisialisasi dari data ViewModel agar data bertahan antar sesi
-    val vaksinDiberikan = remember(vaksinAwal) {
-        mutableStateMapOf<String, String>().also { it.putAll(vaksinAwal) }
+    val context = LocalContext.current
+    val repo    = remember { VaksinRiwayatRepository(context) }
+
+    // vaksinRefId -> tanggalPemberian (dari DB vaksin_riwayat)
+    val vaksinDiberikan = remember { mutableStateMapOf<String, String>() }
+
+    // Load dari DB saat screen dibuka
+    LaunchedEffect(nikAnak) {
+        if (nikAnak.isBlank()) return@LaunchedEffect
+        val riwayat = repo.getRiwayatByAnak(nikAnak)
+        riwayat.forEach { row ->
+            vaksinDiberikan[row.vaksinRefId] = row.tanggalPemberian
+        }
     }
 
     var activeTab by remember { mutableStateOf(0) }
@@ -120,7 +124,12 @@ fun ImunisasiScreen(
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
-        ImunisasiHeader(namaAnak = namaAnak, umurBulan = umurBulan, onNavigateBack = onNavigateBack)
+        ImunisasiHeader(
+            namaAnak       = namaAnak,
+            namaOrtu       = namaOrtu,
+            umurBulan      = umurBulan,
+            onNavigateBack = onNavigateBack
+        )
         ImunisasiTabs(activeTab = activeTab, onTabSelected = { activeTab = it })
 
         Column(
@@ -130,14 +139,23 @@ fun ImunisasiScreen(
         ) {
             Spacer(modifier = Modifier.height(12.dp))
             when (activeTab) {
-                0 -> TabStatus(umurBulan = umurBulan, vaksinDiberikan = vaksinDiberikan)
-                1 -> TabAkanDatang(umurBulan = umurBulan)
+                0 -> TabStatus(
+                    anakId          = nikAnak,
+                    umurBulan       = umurBulan,
+                    tglLahirAnak    = tglLahirAnak,
+                    vaksinDiberikan = vaksinDiberikan,
+                    repo            = repo
+                )
+                1 -> TabAkanDatang(umurBulan = umurBulan, repo = repo)
                 2 -> TabCatat(
+                    anakId          = nikAnak,
+                    kaderId         = kaderId,
                     umurBulan       = umurBulan,
                     vaksinDiberikan = vaksinDiberikan,
-                    onSimpan        = { namaVaksin, tanggal ->
-                        vaksinDiberikan[namaVaksin] = tanggal
-                        onSimpanVaksin(namaVaksin, tanggal)   // ← persist ke ViewModel
+                    repo            = repo,
+                    onSimpan        = { refId, tanggal ->
+                        vaksinDiberikan[refId] = tanggal
+                        onSimpanVaksin(refId, tanggal)
                     }
                 )
             }
@@ -147,21 +165,20 @@ fun ImunisasiScreen(
 }
 
 // ════════════════════════════════════════════════════════════
-//  TAB 0 — STATUS  (vaksin sesuai usia anak)
+//  TAB 0 — STATUS
 // ════════════════════════════════════════════════════════════
 
 @Composable
 fun TabStatus(
+    anakId         : String,
     umurBulan      : Int,
-    vaksinDiberikan: Map<String, String>
+    tglLahirAnak   : String,
+    vaksinDiberikan: Map<String, String>,
+    repo           : VaksinRiwayatRepository
 ) {
-    // Kelompokkan jadwal berdasarkan usia, hanya sampai umur anak sekarang
-    val usiaTampil = jadwalVaksinPosyandu
-        .filter { it.usiaBulan <= umurBulan }
-        .groupBy { it.usiaBulan }
-        .toSortedMap()
+    val semuaVaksin = remember(umurBulan) { repo.getVaksinSudahWaktunya(umurBulan) }
 
-    if (usiaTampil.isEmpty()) {
+    if (semuaVaksin.isEmpty()) {
         Box(
             modifier         = Modifier.fillMaxWidth().padding(32.dp),
             contentAlignment = Alignment.Center
@@ -171,19 +188,23 @@ fun TabStatus(
         return
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        usiaTampil.forEach { (usiaBulan, daftarVaksin) ->
-            // Tentukan status kartu
-            val semuaDiberikan = daftarVaksin.all { vaksinDiberikan.containsKey(it.namaVaksin) }
-            val adaYgBelum     = daftarVaksin.any  { !vaksinDiberikan.containsKey(it.namaVaksin) }
-            val iniUsiaSaatIni = usiaBulan == umurBulan
+    // Group by usia_bulan
+    val grouped = semuaVaksin.groupBy { it.usiaBulan }.toSortedMap()
 
-            // Badge: Lengkap / Pending (bulan aktif belum semua) / Terlambat (bulan lalu belum semua)
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        grouped.forEach { (usiaBulan, daftarVaksin) ->
+            val semuaDone  = daftarVaksin.all { vaksinDiberikan.containsKey(it.id) }
+            val adaBelum   = daftarVaksin.any { !vaksinDiberikan.containsKey(it.id) }
+            val adaTelat   = adaBelum && daftarVaksin.any {
+                !vaksinDiberikan.containsKey(it.id) && tglLahirAnak.isNotBlank() && isTerlambat(tglLahirAnak, it.batasBulan)
+            }
+
             val statusKartu = when {
-                semuaDiberikan                     -> "Lengkap"
-                iniUsiaSaatIni && adaYgBelum       -> "Pending"
-                !iniUsiaSaatIni && adaYgBelum      -> "Terlambat"
-                else                               -> "Lengkap"
+                semuaDone  -> "Lengkap"
+                adaTelat   -> "Terlambat"
+                adaBelum && usiaBulan == umurBulan -> "Pending"
+                adaBelum   -> "Terlambat"
+                else       -> "Lengkap"
             }
 
             val labelUsia = if (usiaBulan == 0) "Lahir" else "$usiaBulan Bulan"
@@ -191,18 +212,19 @@ fun TabStatus(
             ImunisasiCard(
                 usia   = labelUsia,
                 status = statusKartu,
-                vaccines = daftarVaksin.map { jadwal ->
-                    val tanggal    = vaksinDiberikan[jadwal.namaVaksin]
-                    val terlambat  = tanggal == null && usiaBulan < umurBulan
-                    val pending    = tanggal == null && usiaBulan == umurBulan
+                vaccines = daftarVaksin.map { ref ->
+                    val tanggal   = vaksinDiberikan[ref.id]
+                    val terlambat = tanggal == null && tglLahirAnak.isNotBlank() && isTerlambat(tglLahirAnak, ref.batasBulan)
+                    val tglBatas  = if (tglLahirAnak.isNotBlank()) hitungTanggalBatas(tglLahirAnak, ref.batasBulan) else ""
+
                     VaccineEntry(
-                        name    = jadwal.namaVaksin,
-                        info    = when {
+                        name  = ref.nama,
+                        info  = when {
                             tanggal != null -> "Diberikan: $tanggal"
-                            terlambat       -> "Belum diberikan (terlambat)"
+                            terlambat       -> "Terlambat sejak $tglBatas"
                             else            -> "Belum diberikan"
                         },
-                        state   = when {
+                        state = when {
                             tanggal != null -> VaccineState.DONE
                             terlambat       -> VaccineState.LATE
                             else            -> VaccineState.PENDING
@@ -220,11 +242,8 @@ fun TabStatus(
 // ════════════════════════════════════════════════════════════
 
 @Composable
-fun TabAkanDatang(umurBulan: Int) {
-    val mendatang = jadwalVaksinPosyandu
-        .filter { it.usiaBulan > umurBulan }
-        .groupBy { it.usiaBulan }
-        .toSortedMap()
+fun TabAkanDatang(umurBulan: Int, repo: VaksinRiwayatRepository) {
+    val mendatang = remember(umurBulan) { repo.getVaksinAkanDatang(umurBulan) }
 
     if (mendatang.isEmpty()) {
         Box(
@@ -236,15 +255,17 @@ fun TabAkanDatang(umurBulan: Int) {
         return
     }
 
+    val grouped = mendatang.groupBy { it.usiaBulan }.toSortedMap()
+
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        mendatang.forEach { (usiaBulan, daftarVaksin) ->
+        grouped.forEach { (usiaBulan, daftarVaksin) ->
             val labelUsia = if (usiaBulan == 0) "Lahir" else "$usiaBulan Bulan"
             ImunisasiCard(
                 usia   = labelUsia,
                 status = "Akan Datang",
-                vaccines = daftarVaksin.map { jadwal ->
+                vaccines = daftarVaksin.map { ref ->
                     VaccineEntry(
-                        name  = jadwal.namaVaksin,
+                        name  = ref.nama,
                         info  = "Jadwal: usia $usiaBulan bulan",
                         state = VaccineState.PENDING
                     )
@@ -261,48 +282,58 @@ fun TabAkanDatang(umurBulan: Int) {
 
 @Composable
 fun TabCatat(
+    anakId         : String,
+    kaderId        : String,
     umurBulan      : Int,
     vaksinDiberikan: Map<String, String>,
-    onSimpan       : (namaVaksin: String, tanggal: String) -> Unit
+    repo           : VaksinRiwayatRepository,
+    onSimpan       : (vaksinRefId: String, tanggal: String) -> Unit
 ) {
     val context  = LocalContext.current
     val calendar = Calendar.getInstance()
 
-    // Hanya vaksin yang sudah waktunya (usia <= umur anak) DAN belum diberikan
-    val semuaVaksin = jadwalVaksinPosyandu
-        .filter { it.usiaBulan <= umurBulan && !vaksinDiberikan.containsKey(it.namaVaksin) }
-        .sortedWith(compareBy({ it.usiaBulan }, { it.namaVaksin }))
+    // Hanya tampil vaksin yang usia_bulan <= umurBulan dan belum diberikan
+    val belumDiberikan = remember(umurBulan, vaksinDiberikan.size) {
+        repo.getVaksinSudahWaktunya(umurBulan)
+            .filter { !vaksinDiberikan.containsKey(it.id) }
+    }
 
-    var selectedVaksin  by remember { mutableStateOf<JadwalVaksin?>(null) }
-    var tanggalDipilih  by remember { mutableStateOf("") }
+    var selectedVaksin   by remember { mutableStateOf<VaksinRiwayatRepository.VaksinRefRow?>(null) }
+    var tanggalDipilih   by remember { mutableStateOf("") }
     var dropdownExpanded by remember { mutableStateOf(false) }
 
     val datePickerDialog = remember {
         DatePickerDialog(
             context,
             { _, year, month, day ->
-                val d = day.toString().padStart(2, '0')
-                val m = (month + 1).toString().padStart(2, '0')
-                tanggalDipilih = "$d/$m/$year"
+                tanggalDipilih = "%02d/%02d/%04d".format(day, month + 1, year)
             },
             calendar.get(Calendar.YEAR),
             calendar.get(Calendar.MONTH),
             calendar.get(Calendar.DAY_OF_MONTH)
         )
     }
-    if (semuaVaksin.isEmpty()) {
+
+    if (belumDiberikan.isEmpty()) {
         Box(
-            modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp)).background(CardBg)
-                .border(1.dp, CardBorder, RoundedCornerShape(16.dp)).padding(24.dp),
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(CardBg)
+                .border(1.dp, CardBorder, RoundedCornerShape(16.dp))
+                .padding(24.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text("Semua vaksin sudah diberikan! 🎉", color = VaccineInfoGreen, fontSize = 14.sp,
-                fontWeight = FontWeight.Bold)
+            Text(
+                text       = "Semua vaksin sudah diberikan! 🎉",
+                color      = VaccineInfoGreen,
+                fontSize   = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
         }
         return
     }
-
 
     Box(
         modifier = Modifier
@@ -321,11 +352,10 @@ fun TabCatat(
                 fontWeight = FontWeight.Bold
             )
 
-            // ── Pilih vaksin — custom expandable list ─────────
+            // ── Pilih vaksin ──────────────────────────────────
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(text = "Pilih Vaksin", color = LabelColor, fontSize = 12.sp)
 
-                // Trigger row
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -345,8 +375,8 @@ fun TabCatat(
                         verticalAlignment     = Alignment.CenterVertically
                     ) {
                         Text(
-                            text  = selectedVaksin?.let {
-                                "${it.namaVaksin}  (${if (it.usiaBulan == 0) "Lahir" else "${it.usiaBulan} bln"})"
+                            text = selectedVaksin?.let {
+                                "${it.nama}  (${if (it.usiaBulan == 0) "Lahir" else "${it.usiaBulan} bln"})"
                             } ?: "Pilih vaksin...",
                             color    = if (selectedVaksin != null) TextWhite else Color(0xFF6B6B6B),
                             fontSize = 13.sp,
@@ -361,34 +391,29 @@ fun TabCatat(
                     }
                 }
 
-                // List yang muncul tepat di bawah trigger, scrollable, batas bawah navigation bar
                 if (dropdownExpanded) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 280.dp)          // max ~5-6 item, sisanya scroll
+                            .heightIn(max = 280.dp)
                             .clip(RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp))
                             .background(Color(0xFF222222))
                             .border(1.dp, AccentGreen, RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp))
                     ) {
                         androidx.compose.foundation.lazy.LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .navigationBarsPadding()     // jangan ketutupan home bar
+                            modifier = Modifier.fillMaxWidth().navigationBarsPadding()
                         ) {
-                            items(semuaVaksin) { jadwal ->
-                                val sudahDiberikan = vaksinDiberikan.containsKey(jadwal.namaVaksin)
-                                val labelUsia      = if (jadwal.usiaBulan == 0) "Lahir" else "${jadwal.usiaBulan} bln"
-
+                            items(belumDiberikan) { ref ->
+                                val labelUsia = if (ref.usiaBulan == 0) "Lahir" else "${ref.usiaBulan} bln"
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable {
-                                            selectedVaksin   = jadwal
+                                            selectedVaksin   = ref
                                             dropdownExpanded = false
                                         }
                                         .background(
-                                            if (selectedVaksin == jadwal) Color(0xFF1E3A2A)
+                                            if (selectedVaksin?.id == ref.id) Color(0xFF1E3A2A)
                                             else Color.Transparent
                                         )
                                         .padding(horizontal = 14.dp, vertical = 12.dp),
@@ -397,8 +422,8 @@ fun TabCatat(
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text       = jadwal.namaVaksin,
-                                            color      = if (sudahDiberikan) TextGrey else TextWhite,
+                                            text       = ref.nama,
+                                            color      = TextWhite,
                                             fontSize   = 13.sp,
                                             fontWeight = FontWeight.Bold
                                         )
@@ -408,16 +433,7 @@ fun TabCatat(
                                             fontSize = 11.sp
                                         )
                                     }
-                                    if (sudahDiberikan) {
-                                        Icon(
-                                            imageVector        = Icons.Default.Check,
-                                            contentDescription = "Sudah diberikan",
-                                            tint               = IconCheckBg,
-                                            modifier           = Modifier.size(16.dp)
-                                        )
-                                    }
                                 }
-
                                 Divider(color = Color(0xFF333333), thickness = 0.5.dp)
                             }
                         }
@@ -425,7 +441,7 @@ fun TabCatat(
                 }
             }
 
-            // ── Pilih Tanggal ──────────────────────────────
+            // ── Pilih Tanggal ─────────────────────────────────
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(text = "Tanggal Diberikan", color = LabelColor, fontSize = 12.sp)
 
@@ -448,21 +464,24 @@ fun TabCatat(
                 }
             }
 
-            // ── Tombol Simpan ──────────────────────────────
+            // ── Tombol Simpan ─────────────────────────────────
+            val bisaSimpan = selectedVaksin != null && tanggalDipilih.isNotEmpty()
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
-                    .background(
-                        if (selectedVaksin != null && tanggalDipilih.isNotEmpty())
-                            HeaderGreen else Color(0xFF444444)
-                    )
-                    .clickable(
-                        enabled = selectedVaksin != null && tanggalDipilih.isNotEmpty()
-                    ) {
-                        onSimpan(selectedVaksin!!.namaVaksin, tanggalDipilih)
-                        selectedVaksin  = null
-                        tanggalDipilih  = ""
+                    .background(if (bisaSimpan) HeaderGreen else Color(0xFF444444))
+                    .clickable(enabled = bisaSimpan) {
+                        val ref = selectedVaksin!!
+                        repo.insertRiwayat(
+                            anakId           = anakId,
+                            vaksinRefId      = ref.id,
+                            kaderId          = kaderId,
+                            tanggalPemberian = tanggalDipilih
+                        )
+                        onSimpan(ref.id, tanggalDipilih)
+                        selectedVaksin = null
+                        tanggalDipilih = ""
                     }
                     .padding(vertical = 14.dp),
                 contentAlignment = Alignment.Center
@@ -485,6 +504,7 @@ fun TabCatat(
 @Composable
 fun ImunisasiHeader(
     namaAnak      : String,
+    namaOrtu      : String  = "",
     umurBulan     : Int,
     onNavigateBack: () -> Unit
 ) {
@@ -504,28 +524,14 @@ fun ImunisasiHeader(
                 verticalAlignment     = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Icon(
-                    imageVector        = Icons.Filled.ArrowBack,
-                    contentDescription = "Kembali",
-                    tint               = TextWhite,
-                    modifier           = Modifier.size(16.dp)
-                )
+                Icon(Icons.Filled.ArrowBack, "Kembali", tint = TextWhite, modifier = Modifier.size(16.dp))
                 Text(text = "Kembali", color = TextWhite, fontSize = 13.sp)
             }
-
-            Text(
-                text       = "Imunisasi",
-                color      = TextWhite,
-                fontSize   = 24.sp,
-                fontWeight = FontWeight.Bold
-            )
-
-            val labelUmur = "$umurBulan Bulan"
-            Text(
-                text     = "$namaAnak ~ $labelUmur",
-                color    = TextWhite.copy(alpha = 0.75f),
-                fontSize = 13.sp
-            )
+            Text(text = "Imunisasi", color = TextWhite, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text(text = "$namaAnak ~ $umurBulan Bulan", color = TextWhite.copy(alpha = 0.75f), fontSize = 13.sp)
+            if (namaOrtu.isNotBlank()) {
+                Text(text = "Ortu: $namaOrtu", color = TextWhite.copy(alpha = 0.6f), fontSize = 12.sp)
+            }
         }
     }
 }
@@ -535,12 +541,8 @@ fun ImunisasiHeader(
 // ════════════════════════════════════════════════════════════
 
 @Composable
-fun ImunisasiTabs(
-    activeTab    : Int = 0,
-    onTabSelected: (Int) -> Unit = {}
-) {
+fun ImunisasiTabs(activeTab: Int = 0, onTabSelected: (Int) -> Unit = {}) {
     val tabs = listOf("Status", "Akan Datang", "Catat")
-
     Row(
         modifier              = Modifier
             .fillMaxWidth()
@@ -571,7 +573,7 @@ fun ImunisasiTabs(
 }
 
 // ════════════════════════════════════════════════════════════
-//  IMUNISASI CARD  (reusable)
+//  IMUNISASI CARD
 // ════════════════════════════════════════════════════════════
 
 enum class VaccineState { DONE, LATE, PENDING }
@@ -603,24 +605,14 @@ fun ImunisasiCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment     = Alignment.CenterVertically
             ) {
-                Text(
-                    text       = usia,
-                    color      = TextWhite,
-                    fontSize   = 14.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Text(text = usia, color = TextWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 StatusBadge(status = status)
             }
-
             Column {
                 vaccines.forEachIndexed { index, vaccine ->
                     VaccineItem(entry = vaccine)
                     if (index < vaccines.lastIndex) {
-                        Divider(
-                            color     = DividerColor,
-                            thickness = 0.8.dp,
-                            modifier  = Modifier.padding(vertical = 4.dp)
-                        )
+                        Divider(color = DividerColor, thickness = 0.8.dp, modifier = Modifier.padding(vertical = 4.dp))
                     }
                 }
             }
@@ -628,17 +620,13 @@ fun ImunisasiCard(
     }
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Status Badge
-// ─────────────────────────────────────────────────────────────
-
 @Composable
 fun StatusBadge(status: String) {
     val (bg, text) = when (status.lowercase()) {
-        "terlambat"   -> BadgeTerlambatBg   to BadgeTerlambatText
-        "pending"     -> BadgePendingBg     to BadgePendingText
-        "akan datang" -> BadgePendingBg     to BadgePendingText
-        else          -> BadgeLengkapBg     to BadgeLengkapText   // Lengkap
+        "terlambat"   -> BadgeTerlambatBg to BadgeTerlambatText
+        "pending"     -> BadgePendingBg   to BadgePendingText
+        "akan datang" -> BadgePendingBg   to BadgePendingText
+        else          -> BadgeLengkapBg   to BadgeLengkapText
     }
     Box(
         modifier = Modifier
@@ -650,44 +638,28 @@ fun StatusBadge(status: String) {
     }
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Vaccine Item Row
-// ─────────────────────────────────────────────────────────────
-
 @Composable
 fun VaccineItem(entry: VaccineEntry) {
-    val (iconBg, icon, infoColor) = when (entry.state) {
-        VaccineState.DONE    -> Triple(IconCheckBg,   Icons.Filled.Check, VaccineInfoGreen)
-        VaccineState.LATE    -> Triple(IconLateBg,    Icons.Filled.Close, VaccineInfoRed)
-        VaccineState.PENDING -> Triple(IconPendingBg, Icons.Filled.Close, VaccineInfoYellow)
+    val (iconBg, infoColor) = when (entry.state) {
+        VaccineState.DONE    -> IconCheckBg   to VaccineInfoGreen
+        VaccineState.LATE    -> IconLateBg    to VaccineInfoRed
+        VaccineState.PENDING -> IconPendingBg to VaccineInfoYellow
     }
-    // Untuk PENDING pakai ikon jam/titik, kita pakai tanda "–" lewat text override
     Row(
-        modifier              = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
+        modifier              = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         verticalAlignment     = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Box(
-            modifier = Modifier
-                .size(34.dp)
-                .clip(CircleShape)
-                .background(iconBg),
+            modifier = Modifier.size(34.dp).clip(CircleShape).background(iconBg),
             contentAlignment = Alignment.Center
         ) {
-            if (entry.state == VaccineState.PENDING) {
-                Text("?", color = Color(0xFF1A1A1A), fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            } else {
-                Icon(
-                    imageVector        = icon,
-                    contentDescription = null,
-                    tint               = TextWhite,
-                    modifier           = Modifier.size(18.dp)
-                )
+            when (entry.state) {
+                VaccineState.DONE    -> Icon(Icons.Filled.Check,  null, tint = TextWhite, modifier = Modifier.size(18.dp))
+                VaccineState.LATE    -> Icon(Icons.Filled.Close,  null, tint = TextWhite, modifier = Modifier.size(18.dp))
+                VaccineState.PENDING -> Text("?", color = Color(0xFF1A1A1A), fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
         }
-
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(text = entry.name, color = TextWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold)
             Text(text = entry.info, color = infoColor, fontSize = 12.sp)
@@ -702,5 +674,5 @@ fun VaccineItem(entry: VaccineEntry) {
 @Preview(showBackground = true, showSystemUi = true, backgroundColor = 0xFF121212)
 @Composable
 fun ImunisasiScreenPreview() {
-    ImunisasiScreen(namaAnak = "Michael Kwok", umurBulan = 3)
+    ImunisasiScreen(namaAnak = "Budi Santoso", umurBulan = 3)
 }

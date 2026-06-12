@@ -14,6 +14,8 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,12 +46,35 @@ private val VakIconGreen        = Color(0xFF1E8F6A)
 
 @Composable
 fun VaksinOrtuScreen(
-    namaAnak: String = "Nabila Rahmah",
-    usiaGender: String = "14 Bulan - Perempuan",
-    onNavigateBack: () -> Unit = {},
-    onNavigateToRingkasan: () -> Unit = {},
-    onNavigateToPemeriksaan: () -> Unit = {}
+    anakId                  : String   = "",
+    onNavigateBack          : () -> Unit = {},
+    onNavigateToRingkasan   : () -> Unit = {},
+    onNavigateToPemeriksaan : () -> Unit = {}
 ) {
+    val context = LocalContext.current
+
+    var namaAnak   by remember { mutableStateOf("") }
+    var usiaGender by remember { mutableStateOf("") }
+
+    LaunchedEffect(anakId) {
+        val db = DatabaseHelper(context).readableDatabase
+        val cursor = db.rawQuery(
+            "SELECT ${DatabaseHelper.COL_ANAK_NAMA}, ${DatabaseHelper.COL_ANAK_TGL_LAHIR}, " +
+                    "${DatabaseHelper.COL_ANAK_JENIS_KELAMIN} FROM ${DatabaseHelper.TABLE_ANAK} " +
+                    "WHERE ${DatabaseHelper.COL_ANAK_ID} = ?",
+            arrayOf(anakId)
+        )
+        if (cursor.moveToFirst()) {
+            namaAnak   = cursor.getString(0) ?: ""
+            val tgl    = cursor.getString(1) ?: ""
+            val gender = cursor.getString(2) ?: ""
+            val umur   = hitungUmurBulan(tgl)
+            val gLabel = if (gender.lowercase().let { it == "l" || it == "laki-laki" }) "Laki-laki" else "Perempuan"
+            usiaGender = "$umur Bulan - $gLabel"
+        }
+        cursor.close()
+        db.close()
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()

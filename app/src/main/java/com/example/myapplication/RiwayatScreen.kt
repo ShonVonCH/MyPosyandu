@@ -12,11 +12,12 @@ import androidx.compose.material.Icon
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -25,7 +26,6 @@ import androidx.compose.ui.unit.sp
 private val StatBoxBg      = Color(0xFF1A1A1A)
 private val VaksinGreen    = Color(0xFF7ECFB0)
 
-// Status-kondisi warna
 private val KondisiBaikBg    = Color(0xFFB8EDD8)
 private val KondisiBaikText  = Color(0xFF1E6B4E)
 private val KondisiWarnBg    = Color(0xFFFFF3CD)
@@ -35,20 +35,64 @@ private val KondisiBurukText = Color(0xFF9B1C1C)
 
 @Composable
 fun RiwayatScreen(
-    namaAnak                : String           = "Michael Kwok",
-    umurBulan               : Int              = 0,
-    jenisKelamin            : String           = "-",
-    beratBadanTerakhir      : String           = "",
-    tinggiBadanTerakhir     : String           = "",
-    // Data dari ViewModel
-    hasilAnalisis           : HasilAnalisis?   = null,
+    anakId                  : String         = "",
+    hasilAnalisis           : HasilAnalisis? = null,
     vaksinDiberikan         : Map<String, String> = emptyMap(),
-    onNavigateBack          : () -> Unit = {},
-    onNavigateToPemeriksaan : () -> Unit = {},
-    onNavigateToImunisasi   : () -> Unit = {}
+    onNavigateBack          : () -> Unit     = {},
+    onNavigateToPemeriksaan : () -> Unit     = {},
+    onNavigateToImunisasi   : () -> Unit     = {}
 ) {
-    val tampilBerat  = if (beratBadanTerakhir.isNotBlank())  "$beratBadanTerakhir kg"  else "–"
-    val tampilTinggi = if (tinggiBadanTerakhir.isNotBlank()) "$tinggiBadanTerakhir cm" else "–"
+    val context = LocalContext.current
+
+    var namaAnak     by remember { mutableStateOf("") }
+    var umurBulan    by remember { mutableStateOf(0) }
+    var jenisKelamin by remember { mutableStateOf("-") }
+    var dbBB         by remember { mutableStateOf("") }
+    var dbTB         by remember { mutableStateOf("") }
+
+    // Vaksin dari DB
+    var totalVaksin  by remember { mutableStateOf(0) }
+    var sudahVaksin  by remember { mutableStateOf(0) }
+
+    LaunchedEffect(anakId) {
+        if (anakId.isBlank()) return@LaunchedEffect
+
+        val db = DatabaseHelper(context).readableDatabase
+        val cursor = db.rawQuery(
+            "SELECT ${DatabaseHelper.COL_ANAK_NAMA}, ${DatabaseHelper.COL_ANAK_TGL_LAHIR}, " +
+                    "${DatabaseHelper.COL_ANAK_JENIS_KELAMIN} FROM ${DatabaseHelper.TABLE_ANAK} " +
+                    "WHERE ${DatabaseHelper.COL_ANAK_ID} = ?",
+            arrayOf(anakId)
+        )
+        if (cursor.moveToFirst()) {
+            namaAnak     = cursor.getString(0) ?: ""
+            val tgl      = cursor.getString(1) ?: ""
+            val gender   = cursor.getString(2) ?: "-"
+            umurBulan    = hitungUmurBulan(tgl)
+            jenisKelamin = when (gender.trim().lowercase()) {
+                "laki-laki", "l" -> "L"
+                "perempuan", "p" -> "P"
+                else             -> gender.ifBlank { "-" }
+            }
+        }
+        cursor.close()
+        db.close()
+
+        val pemeriksaanRepo = PemeriksaanRepository(context)
+        val row  = pemeriksaanRepo.getPemeriksaanTerakhir(anakId)
+        dbBB = row?.bb?.let { if (it > 0) it.toString() else "" } ?: ""
+        dbTB = row?.tb?.let { if (it > 0) it.toString() else "" } ?: ""
+
+        // Hitung vaksin dari DB
+        val vaksinRepo   = VaksinRiwayatRepository(context)
+        val seharusnya   = vaksinRepo.getVaksinSudahWaktunya(umurBulan)
+        val sudahDiSet   = vaksinRepo.getVaksinSudahDiberikan(anakId)
+        totalVaksin = seharusnya.size
+        sudahVaksin = seharusnya.count { sudahDiSet.contains(it.id) }
+    }
+
+    val tampilBerat  = if (dbBB.isNotBlank()) "$dbBB kg" else "–"
+    val tampilTinggi = if (dbTB.isNotBlank()) "$dbTB cm" else "–"
 
     val labelJK = when (jenisKelamin) {
         "L"  -> "Laki-Laki"
@@ -58,15 +102,11 @@ fun RiwayatScreen(
     val labelUmur = if (umurBulan > 0) "$umurBulan Bulan" else "–"
     val subLabel  = when {
         labelUmur != "–" && labelJK.isNotBlank() && labelJK != "-" -> "$labelUmur · $labelJK"
-        labelUmur != "–" -> labelUmur
-        labelJK.isNotBlank() && labelJK != "-" -> labelJK
-        else -> "–"
+        labelUmur != "–"                                            -> labelUmur
+        labelJK.isNotBlank() && labelJK != "-"                      -> labelJK
+        else                                                         -> "–"
     }
 
-    // ── Hitung persentase vaksin lengkap ──────────────────────────
-    val vaksinSeharusnya = jadwalVaksinPosyandu.filter { it.usiaBulan <= umurBulan }
-    val totalVaksin   = vaksinSeharusnya.size
-    val sudahVaksin   = vaksinSeharusnya.count { vaksinDiberikan.containsKey(it.namaVaksin) }
     val persenVaksin  = if (totalVaksin > 0) (sudahVaksin * 100) / totalVaksin else 0
     val vaksinLengkap = totalVaksin > 0 && sudahVaksin == totalVaksin
 
@@ -199,7 +239,10 @@ private fun ActionCard(
                 .padding(vertical = 20.dp),
             contentAlignment = Alignment.Center
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
                 Text(text = iconEmoji, fontSize = 26.sp)
                 Text(text = label, color = textColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
@@ -221,15 +264,15 @@ fun RiwayatSummary(
     modifier          : Modifier = Modifier
 ) {
     val vaksinColor = when {
-        totalVaksin == 0    -> TextGrey
+        totalVaksin == 0           -> TextGrey
         sudahVaksin == totalVaksin -> VaksinGreen
-        persenVaksin >= 50  -> Color(0xFFF5A623)
-        else                -> Color(0xFFE74C3C)
+        persenVaksin >= 50         -> Color(0xFFF5A623)
+        else                       -> Color(0xFFE74C3C)
     }
     val vaksinLabel = when {
-        totalVaksin == 0         -> "Belum ada jadwal"
+        totalVaksin == 0           -> "Belum ada jadwal"
         sudahVaksin == totalVaksin -> "Vaksin lengkap"
-        else                     -> "$sudahVaksin / $totalVaksin vaksin diberikan"
+        else                       -> "$sudahVaksin / $totalVaksin vaksin diberikan"
     }
 
     Box(
@@ -287,7 +330,7 @@ private fun SummaryStatBox(value: String, label: String, modifier: Modifier = Mo
 }
 
 // ════════════════════════════════════════════════════════════
-//  STATUS CARD — dari HasilAnalisis nyata
+//  STATUS CARD
 // ════════════════════════════════════════════════════════════
 
 @Composable
@@ -298,7 +341,6 @@ fun RiwayatStatus(
     totalVaksin  : Int,
     modifier     : Modifier = Modifier
 ) {
-    // Belum ada data pemeriksaan sama sekali
     if (hasilAnalisis == null) {
         Box(
             modifier = modifier
@@ -320,20 +362,18 @@ fun RiwayatStatus(
         return
     }
 
-    // Tentukan level kondisi keseluruhan dari Z-score
     val overallWarna = when {
         hasilAnalisis.warnasTBU == StatusWarna.DANGER || hasilAnalisis.warnasBBU == StatusWarna.DANGER -> StatusWarna.DANGER
         hasilAnalisis.warnasTBU == StatusWarna.WARN   || hasilAnalisis.warnasBBU == StatusWarna.WARN   -> StatusWarna.WARN
         else -> StatusWarna.NORMAL
     }
 
-    // Gabungkan juga status vaksin ke dalam penilaian keseluruhan
     val adaMasalahVaksin = totalVaksin > 0 && !vaksinLengkap
 
     val finalWarna = when {
-        overallWarna == StatusWarna.DANGER                          -> StatusWarna.DANGER
-        overallWarna == StatusWarna.WARN || adaMasalahVaksin        -> StatusWarna.WARN
-        else                                                        -> StatusWarna.NORMAL
+        overallWarna == StatusWarna.DANGER                   -> StatusWarna.DANGER
+        overallWarna == StatusWarna.WARN || adaMasalahVaksin -> StatusWarna.WARN
+        else                                                 -> StatusWarna.NORMAL
     }
 
     val (cardBg, cardText) = when (finalWarna) {
@@ -348,27 +388,19 @@ fun RiwayatStatus(
         StatusWarna.DANGER -> "Perlu Penanganan Segera"
     }
 
-    // Buat kalimat deskripsi yang informatif
     val deskripsiParts = mutableListOf<String>()
-
-    // Bagian pertumbuhan
-    val pertumbuhanOk = overallWarna == StatusWarna.NORMAL
-    if (pertumbuhanOk) {
-        deskripsiParts += "Pertumbuhan ${namaAnak} normal (TB/U: ${hasilAnalisis.statusTBU}, BB/U: ${hasilAnalisis.statusBBU})."
+    if (overallWarna == StatusWarna.NORMAL) {
+        deskripsiParts += "Pertumbuhan $namaAnak normal (TB/U: ${hasilAnalisis.statusTBU}, BB/U: ${hasilAnalisis.statusBBU})."
     } else {
         if (hasilAnalisis.warnasTBU != StatusWarna.NORMAL)
             deskripsiParts += "Tinggi badan: ${hasilAnalisis.statusTBU} (Z = ${hasilAnalisis.zScoreTBU})."
         if (hasilAnalisis.warnasBBU != StatusWarna.NORMAL)
             deskripsiParts += "Berat badan: ${hasilAnalisis.statusBBU} (Z = ${hasilAnalisis.zScoreBBU})."
     }
-
-    // Bagian vaksin
-    if (totalVaksin == 0) {
-        deskripsiParts += "Belum ada jadwal vaksin untuk usia ini."
-    } else if (vaksinLengkap) {
-        deskripsiParts += "Vaksin sesuai usia sudah lengkap."
-    } else {
-        deskripsiParts += "Ada vaksin yang belum diberikan — cek tab Imunisasi."
+    when {
+        totalVaksin == 0  -> deskripsiParts += "Belum ada jadwal vaksin untuk usia ini."
+        vaksinLengkap     -> deskripsiParts += "Vaksin sesuai usia sudah lengkap."
+        else              -> deskripsiParts += "Ada vaksin yang belum diberikan — cek tab Imunisasi."
     }
 
     Box(
@@ -391,13 +423,8 @@ fun RiwayatStatus(
 //  PREVIEW
 // ════════════════════════════════════════════════════════════
 
-@Preview(showBackground = true, showSystemUi = true, backgroundColor = 0xFF121212L)
+@Preview(showBackground = true, showSystemUi = true, backgroundColor = 0xFF121212)
 @Composable
 fun RiwayatScreenPreview() {
-    RiwayatScreen(
-        beratBadanTerakhir  = "8.1",
-        tinggiBadanTerakhir = "72",
-        umurBulan           = 36,
-        jenisKelamin        = "L"
-    )
+    RiwayatScreen(anakId = "")
 }

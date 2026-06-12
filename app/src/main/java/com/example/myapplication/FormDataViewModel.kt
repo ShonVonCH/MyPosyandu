@@ -24,39 +24,42 @@ data class FormOrangTuaData(
 data class OrangTuaAccount(
     val nama      : String,
     val username  : String,
-    val jumlahAnak: Int
+    val noHp      : String = "",
+    val password  : String = "",
+    val jumlahAnak: Int    = 0
 )
 
-// Entry lengkap: data anak + nama orang tua yang terhubung
 data class RegisteredAnakEntry(
     val formAnak    : FormAnakData,
     val namaOrangTua: String
 )
 
 class FormDataViewModel : ViewModel() {
-    var formAnak          by mutableStateOf(FormAnakData())
-    var formOrangTua      by mutableStateOf(FormOrangTuaData())
-    var dariKonfirmasi    by mutableStateOf(false)
 
-    // Snapshot data terakhir yang disimpan — dipakai di SuksesDaftarScreen
+    var formAnak       by mutableStateOf(FormAnakData())
+    var formOrangTua   by mutableStateOf(FormOrangTuaData())
+    var dariKonfirmasi by mutableStateOf(false)
+
     var lastSavedAnak     by mutableStateOf(FormAnakData())
     var lastSavedOrangTua by mutableStateOf(FormOrangTuaData())
 
-    val akunOrangTuaList = mutableStateListOf(
-        OrangTuaAccount("Rina Susanti", "@ortu_rina", 3),
-        OrangTuaAccount("Sri Wahyuni",  "@ortu_sri",  3),
-        OrangTuaAccount("Dewi Lestari", "@ortu_dewi", 3)
-    )
+    var loggedInOrangTuaUsername by mutableStateOf("")
+    var loggedInKaderId          by mutableStateOf("")
 
-    // Simpan entry lengkap (anak + nama ortu) agar bisa ditampilkan di DataAnakScreen
+    // ── In-memory list (tetap dipakai untuk UI realtime) ───────────
+    val akunOrangTuaList   = mutableStateListOf<OrangTuaAccount>()
+    val akunPasswordMap    = mutableMapOf<String, String>()
     val registeredAnakList = mutableStateListOf<RegisteredAnakEntry>()
 
+    /**
+     * Dipanggil dari KonfirmasiDataScreen setelah SQLite berhasil di-insert.
+     * Update state UI in-memory agar Dashboard & DataAnak langsung reflect data baru.
+     */
     fun simpanAnak() {
-        // Simpan snapshot SEBELUM reset
         lastSavedAnak     = formAnak
         lastSavedOrangTua = formOrangTua
 
-        // Tambahkan entry lengkap ke daftar
+        // Tambah ke list anak terdaftar
         registeredAnakList.add(
             RegisteredAnakEntry(
                 formAnak     = formAnak,
@@ -64,7 +67,7 @@ class FormDataViewModel : ViewModel() {
             )
         )
 
-        // Increment jumlahAnak pada akun orang tua yang dipilih
+        // Update jumlahAnak di akunOrangTuaList
         val idx = akunOrangTuaList.indexOfFirst { it.username == formOrangTua.username }
         if (idx != -1) {
             val akun = akunOrangTuaList[idx]
@@ -76,13 +79,70 @@ class FormDataViewModel : ViewModel() {
         formOrangTua = FormOrangTuaData()
     }
 
+    /**
+     * Tambah akun ortu baru ke in-memory list.
+     * Dipanggil dari HubungOrangTuaScreen saat method = "new".
+     */
     fun tambahAkunOrangTua(nama: String, username: String, noHp: String, password: String) {
-        akunOrangTuaList.add(OrangTuaAccount(nama, username, 0))
+        // Hindari duplikat
+        if (akunOrangTuaList.none { it.username == username }) {
+            akunOrangTuaList.add(OrangTuaAccount(nama, username, noHp, password, 0))
+        }
+        akunPasswordMap[username] = password
         formOrangTua = FormOrangTuaData(
             nama     = nama,
             username = username,
             noHp     = noHp,
             password = password
         )
+    }
+
+    /**
+     * Sync akun ortu dari SQLite ke in-memory list.
+     * Dipanggil setelah login agar CariAkunCard dan dashboard mencerminkan data DB.
+     */
+    fun syncAkunOrangTuaFromDb(list: List<OrangTuaRepository.OrtuSummary>) {
+        akunOrangTuaList.clear()
+        list.forEach { ortu ->
+            akunOrangTuaList.add(
+                OrangTuaAccount(
+                    nama       = ortu.namaOrtu,
+                    username   = ortu.usernameOrtu,
+                    noHp       = ortu.noHpOrtu,
+                    password   = ortu.passOrtu,
+                    jumlahAnak = ortu.jumlahAnak
+                )
+            )
+            akunPasswordMap[ortu.usernameOrtu] = ortu.passOrtu
+        }
+    }
+
+    /**
+     * Sync anak terdaftar dari SQLite ke in-memory list.
+     * Dipanggil setelah login agar DataAnak & Dashboard tidak kosong.
+     */
+    fun syncAnakFromDb(list: List<OrangTuaRepository.OrangTuaAnakRow>) {
+        registeredAnakList.clear()
+        list.forEach { row ->
+            if (!row.namaAnak.isNullOrBlank()) {
+                registeredAnakList.add(
+                    RegisteredAnakEntry(
+                        formAnak = FormAnakData(
+                            namaLengkap  = row.namaAnak     ?: "",
+                            nik          = row.nikAnak      ?: "",
+                            tanggalLahir = row.tglLahirAnak ?: "",
+                            jenisKelamin = row.genderAnak   ?: "",
+                            alamat       = row.alamatAnak   ?: ""
+                        ),
+                        namaOrangTua = row.namaOrtu
+                    )
+                )
+            }
+        }
+    }
+
+    fun loginOrangTua(username: String, password: String): OrangTuaAccount? {
+        val akun = akunOrangTuaList.find { it.username == username } ?: return null
+        return if (akunPasswordMap[username] == password) akun else null
     }
 }

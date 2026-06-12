@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -37,35 +38,46 @@ import java.time.temporal.ChronoUnit
 // ─────────────────────────────────────────────
 
 data class AnakData(
+    val id           : String,
     val nama         : String,
-    val status       : String,
-    val tinggiBadan  : Int,
-    val beratBadan   : Int,
-    val umurBulan    : Int,
-    val tanggal      : String,
-    val namaOrangTua : String = "-",
-    val jenisKelamin : String = "-"
+    val status       : String  = "-",
+    val tinggiBadan  : Double  = 0.0,
+    val beratBadan   : Double  = 0.0,
+    val umurBulan    : Int     = 0,
+    val tanggal      : String  = "-",   // tanggal lahir (format singkat)
+    val namaOrangTua : String  = "-",
+    val jenisKelamin : String  = "-"
 )
 
 fun hitungUmurBulan(tanggalLahir: String): Int {
     return try {
-        val formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy")
-        val lahir     = LocalDate.parse(tanggalLahir, formatter)
-        val sekarang  = LocalDate.now()
-        ChronoUnit.MONTHS.between(lahir, sekarang).toInt().coerceAtLeast(0)
-    } catch (e: Exception) {
-        0
-    }
+        val lahir = when {
+            // format dd/MM/yyyy
+            tanggalLahir.matches(Regex("""\d{2}/\d{2}/\d{4}""")) -> {
+                val parts = tanggalLahir.split("/")
+                LocalDate.of(parts[2].toInt(), parts[1].toInt(), parts[0].toInt())
+            }
+            // format yyyy-MM-dd
+            else -> {
+                val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+                LocalDate.parse(tanggalLahir, formatter)
+            }
+        }
+        ChronoUnit.MONTHS.between(lahir, LocalDate.now()).toInt().coerceAtLeast(0)
+    } catch (e: Exception) { 0 }
 }
 
 fun formatTanggalSingkat(tanggalLahir: String): String {
     return try {
-        val input  = DateTimeFormatter.ofPattern("dd/MM/yyyy")
-        val output = DateTimeFormatter.ofPattern("MMM yyyy")
-        LocalDate.parse(tanggalLahir, input).format(output)
-    } catch (e: Exception) {
-        tanggalLahir
-    }
+        val lahir = when {
+            tanggalLahir.matches(Regex("""\d{2}/\d{2}/\d{4}""")) -> {
+                val parts = tanggalLahir.split("/")
+                LocalDate.of(parts[2].toInt(), parts[1].toInt(), parts[0].toInt())
+            }
+            else -> LocalDate.parse(tanggalLahir, DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+        }
+        lahir.format(DateTimeFormatter.ofPattern("MMM yyyy"))
+    } catch (e: Exception) { tanggalLahir }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -74,39 +86,65 @@ fun formatTanggalSingkat(tanggalLahir: String): String {
 
 @Composable
 fun DataAnakScreen(
-    viewModel     : FormDataViewModel? = null,
-    anakViewModel : AnakViewModel?     = null,
     onTambahClick : () -> Unit         = {},
     onAnakClick   : (AnakData) -> Unit = {},
     onNavigateBack: () -> Unit         = {}
 ) {
-    // Semua anak dari ViewModel (tidak ada dummy)
-    val allAnakList = remember(viewModel?.registeredAnakList?.size) {
-        viewModel?.registeredAnakList?.map { entry ->
-            val umur = hitungUmurBulan(entry.formAnak.tanggalLahir)
-            AnakData(
-                nama         = entry.formAnak.namaLengkap,
-                status       = "Baru Terdaftar",
-                tinggiBadan  = 0,
-                beratBadan   = 0,
-                umurBulan    = umur,
-                tanggal      = formatTanggalSingkat(entry.formAnak.tanggalLahir),
-                namaOrangTua = entry.namaOrangTua.ifBlank { "-" },
-                jenisKelamin = when (entry.formAnak.jenisKelamin.trim().lowercase()) {
+    val context = LocalContext.current
+
+    var allAnakList by remember { mutableStateOf<List<AnakData>>(emptyList()) }
+    var searchQuery by remember { mutableStateOf("") }
+
+    // Load semua anak dari SQLite + pemeriksaan terakhir
+    LaunchedEffect(Unit) {
+        val db   = DatabaseHelper(context).readableDatabase
+        val repo = PemeriksaanRepository(context)
+
+        // JOIN anak + ortu untuk dapat nama ortu
+        val cursor = db.rawQuery(
+            """
+            SELECT a.${DatabaseHelper.COL_ANAK_ID},
+                   a.${DatabaseHelper.COL_ANAK_NAMA},
+                   a.${DatabaseHelper.COL_ANAK_TGL_LAHIR},
+                   a.${DatabaseHelper.COL_ANAK_JENIS_KELAMIN},
+                   o.${DatabaseHelper.COL_ORTU_NAMA}
+            FROM   ${DatabaseHelper.TABLE_ANAK} a
+            LEFT JOIN ${DatabaseHelper.TABLE_ORTU} o
+                   ON a.${DatabaseHelper.COL_ANAK_ORTU_ID} = o.${DatabaseHelper.COL_ORTU_ID}
+            ORDER BY a.${DatabaseHelper.COL_ANAK_NAMA} ASC
+            """.trimIndent(),
+            null
+        )
+
+        val list = mutableListOf<AnakData>()
+        while (cursor.moveToNext()) {
+            val anakId   = cursor.getString(0) ?: continue
+            val nama     = cursor.getString(1) ?: ""
+            val tglLahir = cursor.getString(2) ?: ""
+            val gender   = cursor.getString(3) ?: "-"
+            val namaOrtu = cursor.getString(4) ?: "-"
+
+            val pmrk = repo.getPemeriksaanTerakhir(anakId)
+
+            list.add(AnakData(
+                id           = anakId,
+                nama         = nama,
+                tinggiBadan  = pmrk?.tb ?: 0.0,
+                beratBadan   = pmrk?.bb ?: 0.0,
+                umurBulan    = hitungUmurBulan(tglLahir),
+                tanggal      = formatTanggalSingkat(tglLahir),
+                namaOrangTua = namaOrtu,
+                jenisKelamin = when (gender.trim().lowercase()) {
                     "laki-laki", "l" -> "L"
                     "perempuan", "p" -> "P"
-                    else             -> entry.formAnak.jenisKelamin.ifBlank { "-" }
+                    else             -> gender.ifBlank { "-" }
                 }
-            )
-        } ?: emptyList()
+            ))
+        }
+        cursor.close()
+        db.close()
+        allAnakList = list
     }
-
-    // Auto-refresh saat hasil pemeriksaan berubah
-    val hasilPemeriksaan by (anakViewModel?.hasilPemeriksaan
-        ?: kotlinx.coroutines.flow.MutableStateFlow(emptyMap())
-            ).collectAsState()
-
-    var searchQuery by remember { mutableStateOf("") }
 
     val filteredList = remember(searchQuery, allAnakList) {
         if (searchQuery.isBlank()) allAnakList
@@ -147,23 +185,18 @@ fun DataAnakScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text      = "Belum ada anak terdaftar.\nTekan \"Tambah Anak Baru\" untuk mulai.",
-                            color     = TextGrey,
-                            fontSize  = 14.sp,
-                            textAlign = TextAlign.Center,
+                            text       = "Belum ada anak terdaftar.\nTekan \"Tambah Anak Baru\" untuk mulai.",
+                            color      = TextGrey,
+                            fontSize   = 14.sp,
+                            textAlign  = TextAlign.Center,
                             lineHeight = 22.sp
                         )
                     }
                 }
             } else {
                 items(filteredList) { anak ->
-                    val bbTerkini = hasilPemeriksaan[anak.nama]?.first
-                    val tbTerkini = hasilPemeriksaan[anak.nama]?.second
-                    val tampilBB  = bbTerkini?.toDoubleOrNull()?.toInt() ?: anak.beratBadan
-                    val tampilTB  = tbTerkini?.toDoubleOrNull()?.toInt() ?: anak.tinggiBadan
-
                     AnakListItem(
-                        data    = anak.copy(beratBadan = tampilBB, tinggiBadan = tampilTB),
+                        data    = anak,
                         onClick = { onAnakClick(anak) }
                     )
                 }
@@ -221,19 +254,9 @@ fun DataAnakHeader(jumlahAnak: Int, onBack: () -> Unit) {
             }
 
             Spacer(modifier = Modifier.height(20.dp))
-            Text(
-                text       = "Data Anak",
-                color      = TextWhite,
-                fontSize   = 26.sp,
-                fontWeight = FontWeight.Bold
-            )
+            Text(text = "Data Anak", color = TextWhite, fontSize = 26.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text       = "$jumlahAnak Anak Terdaftar",
-                color      = TextGreenLight,
-                fontSize   = 14.sp,
-                fontWeight = FontWeight.Normal
-            )
+            Text(text = "$jumlahAnak Anak Terdaftar", color = TextGreenLight, fontSize = 14.sp)
         }
     }
 }
@@ -343,12 +366,10 @@ fun AnakListItem(
                 }
 
                 Spacer(modifier = Modifier.height(2.dp))
-                Text(text = data.status, color = TextGrey, fontSize = 13.sp)
-                Spacer(modifier = Modifier.height(2.dp))
+                val bbStr = if (data.beratBadan > 0)  formatAngka(data.beratBadan) + " kg"  else "–"
+                val tbStr = if (data.tinggiBadan > 0) formatAngka(data.tinggiBadan) + " cm" else "–"
                 Text(
-                    text  = "TB: ${if (data.tinggiBadan > 0) "${data.tinggiBadan} cm" else "–"}  " +
-                            "BB: ${if (data.beratBadan  > 0) "${data.beratBadan} kg"  else "–"}  " +
-                            "Umur: ${data.umurBulan} bln",
+                    text  = "TB: $tbStr  BB: $bbStr  Umur: ${data.umurBulan} bln",
                     color = TextGrey, fontSize = 12.sp
                 )
                 Spacer(modifier = Modifier.height(2.dp))
@@ -365,6 +386,11 @@ fun AnakListItem(
     }
 
     Divider(color = SurfaceDarkBorder, thickness = 0.8.dp)
+}
+
+private fun formatAngka(nilai: Double): String {
+    return if (nilai == kotlin.math.floor(nilai)) nilai.toInt().toString()
+    else "%.1f".format(nilai)
 }
 
 // ════════════════════════════════════════════════════════════
@@ -402,10 +428,6 @@ fun TambahAnakButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
         }
     }
 }
-
-// ════════════════════════════════════════════════════════════
-//  PREVIEW
-// ════════════════════════════════════════════════════════════
 
 @Preview(showBackground = true, showSystemUi = true, backgroundColor = 0xFF121212)
 @Composable
