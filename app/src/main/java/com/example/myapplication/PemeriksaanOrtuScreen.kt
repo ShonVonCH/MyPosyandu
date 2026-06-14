@@ -12,11 +12,11 @@ import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -45,11 +45,13 @@ fun PemeriksaanOrtuScreen(
     LaunchedEffect(anakId) {
         val db = DatabaseHelper(context).readableDatabase
         val cursor = db.rawQuery(
-            "SELECT ${DatabaseHelper.COL_ANAK_NAMA} FROM ${DatabaseHelper.TABLE_ANAK} " +
-                    "WHERE ${DatabaseHelper.COL_ANAK_ID} = ?",
+            "SELECT ${DatabaseHelper.COL_ANAK_NAMA}, ${DatabaseHelper.COL_ANAK_TGL_LAHIR}, ${DatabaseHelper.COL_ANAK_JENIS_KELAMIN} " +
+                    "FROM ${DatabaseHelper.TABLE_ANAK} WHERE ${DatabaseHelper.COL_ANAK_ID} = ?",
             arrayOf(anakId)
         )
-        if (cursor.moveToFirst()) namaAnak = cursor.getString(0) ?: ""
+        if (cursor.moveToFirst()) {
+            namaAnak = cursor.getString(0) ?: ""
+        }
         cursor.close()
         db.close()
 
@@ -81,7 +83,7 @@ fun PemeriksaanOrtuScreen(
 
         PemeriksaanContent(riwayat = riwayat)
 
-        Spacer(modifier = Modifier.height(40.dp))
+        Spacer(modifier = Modifier.height(80.dp))
     }
 }
 
@@ -178,8 +180,6 @@ private fun PemTabs(
     Divider(color = SurfaceDarkBorder, thickness = 1.dp)
 }
 
-// Ganti fungsi PemeriksaanContent dan ItemRiwayat saja, sisanya sama
-
 @Composable
 private fun PemeriksaanContent(riwayat: List<RiwayatPemeriksaanItem>) {
     Column(
@@ -240,7 +240,6 @@ private fun ItemRiwayat(
 ) {
     val hasil = item.hasil
 
-    // Warna baris berdasarkan status overall
     val statusColor = when {
         hasil == null -> TextGrey
         hasil.warnasTBU == StatusWarna.DANGER || hasil.warnasBBU == StatusWarna.DANGER -> Color(0xFFE74C3C)
@@ -249,7 +248,6 @@ private fun ItemRiwayat(
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        // Tanggal + status chip
         Row(
             modifier              = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -279,7 +277,6 @@ private fun ItemRiwayat(
 
         Spacer(modifier = Modifier.height(6.dp))
 
-        // Detail antropometri
         Text(
             text  = buildString {
                 if (item.tb.isNotBlank()) append("TB: ${item.tb} cm")
@@ -291,7 +288,6 @@ private fun ItemRiwayat(
             fontSize = 13.sp
         )
 
-        // Z-score row
         if (hasil != null) {
             Spacer(modifier = Modifier.height(4.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {

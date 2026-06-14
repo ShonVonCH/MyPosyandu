@@ -8,7 +8,8 @@ data class KaderInfo(
     val nama       : String,
     val kelurahan  : String,
     val rw         : String,
-    val posyanduNama: String
+    val posyanduNama: String,
+    val alamat     : String  // <-- TAMBAH field alamat
 )
 
 data class JadwalBerikutnya(
@@ -39,22 +40,25 @@ class DashboardKaderRepository(context: Context) {
         userCursor.close()
 
         val posyanduCursor = db.rawQuery(
-            "SELECT ${DatabaseHelper.COL_POSYANDU_NAMA}, ${DatabaseHelper.COL_POSYANDU_KELURAHAN}, ${DatabaseHelper.COL_POSYANDU_RW} FROM ${DatabaseHelper.TABLE_POSYANDU} WHERE ${DatabaseHelper.COL_POSYANDU_ID} = ?",
+            "SELECT ${DatabaseHelper.COL_POSYANDU_NAMA}, ${DatabaseHelper.COL_POSYANDU_KELURAHAN}, ${DatabaseHelper.COL_POSYANDU_RW}, ${DatabaseHelper.COL_POSYANDU_ALAMAT} FROM ${DatabaseHelper.TABLE_POSYANDU} WHERE ${DatabaseHelper.COL_POSYANDU_ID} = ?",
             arrayOf(posyanduId)
         )
 
         val posyanduNama : String
         val kelurahan    : String
         val rw           : String
+        val alamat       : String
 
         if (posyanduCursor.moveToFirst()) {
             posyanduNama = posyanduCursor.getString(0) ?: ""
             kelurahan    = posyanduCursor.getString(1) ?: ""
             rw           = posyanduCursor.getString(2) ?: ""
+            alamat       = posyanduCursor.getString(3) ?: ""
         } else {
             posyanduNama = ""
             kelurahan    = ""
             rw           = ""
+            alamat       = ""
         }
         posyanduCursor.close()
 
@@ -62,7 +66,8 @@ class DashboardKaderRepository(context: Context) {
             nama        = nama,
             kelurahan   = kelurahan,
             rw          = rw,
-            posyanduNama = posyanduNama
+            posyanduNama = posyanduNama,
+            alamat      = alamat
         )
     }
 

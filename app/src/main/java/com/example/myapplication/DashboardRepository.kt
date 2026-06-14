@@ -8,13 +8,13 @@ class DashboardRepository(context: Context) {
 
     private val db = DatabaseHelper(context).readableDatabase
 
-    private val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+    private val formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy")
 
     private val today: String
         get() = LocalDate.now().format(formatter)
 
     private val bulanIni: String
-        get() = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM"))
+        get() = LocalDate.now().format(DateTimeFormatter.ofPattern("MM/yyyy"))
 
     /**
      * Total anak terdaftar dari TABLE_ANAK
@@ -31,23 +31,24 @@ class DashboardRepository(context: Context) {
 
     /**
      * Anak hadir HARI INI
-     * Cek dari TABLE_PEMERIKSAAN → tanggal = hari ini
-     * UNION dengan TABLE_IMUNISASI → tgl_vaksin = hari ini, status = 1
+     * Format tanggal di DB: dd/MM/yyyy
+     * Cek dari TABLE_PEMERIKSAAN → tanggal = hari ini (dd/MM/yyyy)
+     * UNION DISTINCT dengan TABLE_VAKSIN_RIWAYAT → tanggal_pemberian = hari ini
+     * DISTINCT = anak_id yang sama dianggap 1 meski ada di kedua tabel
      */
     fun getAnakHadirHariIni(): Int {
         val cursor = db.rawQuery(
             """
-            SELECT COUNT(*) FROM (
+            SELECT COUNT(DISTINCT anak_id) FROM (
                 SELECT ${DatabaseHelper.COL_PMRK_ANAK_ID} AS anak_id
                 FROM ${DatabaseHelper.TABLE_PEMERIKSAAN}
                 WHERE ${DatabaseHelper.COL_PMRK_TGL} = ?
 
-                UNION
+                UNION ALL
 
-                SELECT ${DatabaseHelper.COL_IMN_NIK_ANAK} AS anak_id
-                FROM ${DatabaseHelper.TABLE_IMUNISASI}
-                WHERE ${DatabaseHelper.COL_IMN_STATUS} = 1
-                  AND ${DatabaseHelper.COL_IMN_TGL_VAKSIN} = ?
+                SELECT ${DatabaseHelper.COL_VR_ANAK_ID} AS anak_id
+                FROM ${DatabaseHelper.TABLE_VAKSIN_RIWAYAT}
+                WHERE ${DatabaseHelper.COL_VR_TANGGAL_PEMBERIAN} = ?
             )
             """.trimIndent(),
             arrayOf(today, today)
@@ -59,21 +60,23 @@ class DashboardRepository(context: Context) {
 
     /**
      * Anak hadir BULAN INI (unik per anak_id)
+     * Format tanggal di DB: dd/MM/yyyy
+     * Extract MM/yyyy dengan substr(tanggal, 4, 7) = '06/2026'
+     * DISTINCT anak_id yang hadir di bulan ini, baik dari pemeriksaan maupun vaksin
      */
     fun getAnakHadirBulanIni(): Int {
         val cursor = db.rawQuery(
             """
-            SELECT COUNT(*) FROM (
+            SELECT COUNT(DISTINCT anak_id) FROM (
                 SELECT ${DatabaseHelper.COL_PMRK_ANAK_ID} AS anak_id
                 FROM ${DatabaseHelper.TABLE_PEMERIKSAAN}
-                WHERE strftime('%Y-%m', ${DatabaseHelper.COL_PMRK_TGL}) = ?
+                WHERE substr(${DatabaseHelper.COL_PMRK_TGL}, 4, 7) = ?
 
-                UNION
+                UNION ALL
 
-                SELECT ${DatabaseHelper.COL_IMN_NIK_ANAK} AS anak_id
-                FROM ${DatabaseHelper.TABLE_IMUNISASI}
-                WHERE ${DatabaseHelper.COL_IMN_STATUS} = 1
-                  AND strftime('%Y-%m', ${DatabaseHelper.COL_IMN_TGL_VAKSIN}) = ?
+                SELECT ${DatabaseHelper.COL_VR_ANAK_ID} AS anak_id
+                FROM ${DatabaseHelper.TABLE_VAKSIN_RIWAYAT}
+                WHERE substr(${DatabaseHelper.COL_VR_TANGGAL_PEMBERIAN}, 4, 7) = ?
             )
             """.trimIndent(),
             arrayOf(bulanIni, bulanIni)
@@ -81,5 +84,35 @@ class DashboardRepository(context: Context) {
         val count = if (cursor.moveToFirst()) cursor.getInt(0) else 0
         cursor.close()
         return count
+    }
+
+    /**
+     * Jumlah jadwal posyandu di BULAN INI
+     * Format tanggal di jadwal_posyandu: yyyy-MM-dd (dari API)
+     * strftime works untuk yyyy-MM-dd
+     */
+    fun getJadwalBulanIni(): Int {
+        val cursor = db.rawQuery(
+            """
+            SELECT COUNT(*) 
+            FROM ${DatabaseHelper.TABLE_JADWAL_POSYANDU}
+            WHERE strftime('%Y-%m', ${DatabaseHelper.COL_JADWAL_TANGGAL}) = ?
+              AND LOWER(${DatabaseHelper.COL_JADWAL_STATUS}) = 'terjadwal'
+            """.trimIndent(),
+            arrayOf(LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM")))
+        )
+        val count = if (cursor.moveToFirst()) cursor.getInt(0) else 0
+        cursor.close()
+        return count
+    }
+
+    /**
+     * Total kehadiran yang diharapkan = jumlah jadwal posyandu di bulan ini × total anak
+     * Jika tidak ada jadwal, fallback ke total anak (1×)
+     */
+    fun getTotalKehadiranTarget(): Int {
+        val jadwalCount = getJadwalBulanIni()
+        val totalAnak = getTotalAnak()
+        return if (jadwalCount > 0) jadwalCount * totalAnak else totalAnak
     }
 }

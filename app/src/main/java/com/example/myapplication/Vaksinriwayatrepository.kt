@@ -138,6 +138,32 @@ class VaksinRiwayatRepository(context: Context) {
         return result
     }
 
+    // ── READ alamat posyandu ──────────────────────────────────
+
+    /** Ambil alamat posyandu dari user yang sedang login */
+    fun getAlamatPosyandu(): String {
+        val db = dbHelper.readableDatabase
+        var cursor: Cursor? = null
+        return try {
+            cursor = db.rawQuery(
+                """
+                SELECT p.${DatabaseHelper.COL_POSYANDU_ALAMAT}
+                FROM ${DatabaseHelper.TABLE_POSYANDU} p
+                JOIN ${DatabaseHelper.TABLE_USERS} u
+                    ON p.${DatabaseHelper.COL_POSYANDU_ID} = u.${DatabaseHelper.COL_USERS_POSYANDU_ID}
+                LIMIT 1
+                """.trimIndent(),
+                null
+            )
+            if (cursor.moveToFirst()) {
+                cursor.getString(0) ?: "Posyandu"
+            } else "Posyandu"
+        } finally {
+            cursor?.close()
+            db.close()
+        }
+    }
+
     // ── WRITE vaksin_riwayat ──────────────────────────────────
 
     fun insertRiwayat(
@@ -187,4 +213,25 @@ class VaksinRiwayatRepository(context: Context) {
         tanggalPemberian = getString(getColumnIndexOrThrow(DatabaseHelper.COL_VR_TANGGAL_PEMBERIAN)) ?: "",
         lokasi           = getString(getColumnIndexOrThrow(DatabaseHelper.COL_VR_LOKASI))            ?: ""
     )
+
+    // ── READ ALL vaksin_riwayat (untuk sync ke API) ───────────────────────────
+
+    /** Semua riwayat vaksin dari tabel vaksin_riwayat */
+    fun getAllVaksinRiwayat(): List<VaksinRiwayatRow> {
+        val db     = dbHelper.readableDatabase
+        val result = mutableListOf<VaksinRiwayatRow>()
+        var cursor: Cursor? = null
+        try {
+            cursor = db.query(
+                DatabaseHelper.TABLE_VAKSIN_RIWAYAT,
+                null, null, null, null, null,
+                "${DatabaseHelper.COL_VR_TANGGAL_PEMBERIAN} DESC"
+            )
+            while (cursor.moveToNext()) result.add(cursor.toRiwayatRow())
+        } finally {
+            cursor?.close()
+            db.close()
+        }
+        return result
+    }
 }

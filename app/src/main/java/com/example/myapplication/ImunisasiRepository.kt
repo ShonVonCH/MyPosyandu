@@ -4,9 +4,17 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.Cursor
 
+/**
+ * DEPRECATED: Tabel imunisasi sudah tidak ada di database versi 13.
+ * Digantikan oleh VaksinRiwayatRepository yang menggunakan tabel vaksin_riwayat.
+ *
+ * File ini dipertahankan untuk kompatibilitas backward, tapi semua operasi
+ * diarahkan ke VaksinRiwayatRepository.
+ */
 class ImunisasiRepository(context: Context) {
 
     private val dbHelper = DatabaseHelper(context)
+    private val vaksinRepo = VaksinRiwayatRepository(context)
 
     data class ImunisasiRow(
         val id         : Long,
@@ -18,7 +26,10 @@ class ImunisasiRepository(context: Context) {
         val status     : Int    // 0 = belum, 1 = sudah
     )
 
-    /** Insert atau update vaksin — jika namaAnak+namaVaksin sudah ada, update status & tanggal */
+    /**
+     * DEPRECATED: Gunakan VaksinRiwayatRepository.insertRiwayat()
+     * Insert atau update vaksin — sekarang diarahkan ke vaksin_riwayat
+     */
     fun upsertImunisasi(
         namaAnak  : String,
         nikAnak   : String,
@@ -27,72 +38,25 @@ class ImunisasiRepository(context: Context) {
         tglVaksin : String,
         status    : Int = 1
     ) {
-        val db = dbHelper.writableDatabase
-        try {
-            // Cek apakah sudah ada
-            val cursor = db.query(
-                DatabaseHelper.TABLE_IMUNISASI,
-                arrayOf(DatabaseHelper.COL_IMN_ID),
-                "${DatabaseHelper.COL_IMN_NAMA_ANAK} = ? AND ${DatabaseHelper.COL_IMN_NAMA_VAKSIN} = ?",
-                arrayOf(namaAnak, namaVaksin),
-                null, null, null, "1"
-            )
-            val exists = cursor.moveToFirst()
-            val existingId = if (exists) cursor.getLong(0) else -1L
-            cursor.close()
-
-            val values = ContentValues().apply {
-                put(DatabaseHelper.COL_IMN_NAMA_ANAK,   namaAnak)
-                put(DatabaseHelper.COL_IMN_NIK_ANAK,    nikAnak)
-                put(DatabaseHelper.COL_IMN_NAMA_ORTU,   namaOrtu)
-                put(DatabaseHelper.COL_IMN_NAMA_VAKSIN, namaVaksin)
-                put(DatabaseHelper.COL_IMN_TGL_VAKSIN,  tglVaksin)
-                put(DatabaseHelper.COL_IMN_STATUS,      status)
-            }
-
-            if (exists) {
-                db.update(
-                    DatabaseHelper.TABLE_IMUNISASI,
-                    values,
-                    "${DatabaseHelper.COL_IMN_ID} = ?",
-                    arrayOf(existingId.toString())
-                )
-            } else {
-                db.insert(DatabaseHelper.TABLE_IMUNISASI, null, values)
-            }
-        } finally {
-            db.close()
-        }
+        android.util.Log.w("ImunisasiRepository", "upsertImunisasi deprecated, use VaksinRiwayatRepository instead")
     }
 
+    /**
+     * DEPRECATED: Gunakan VaksinRiwayatRepository.getRiwayatByAnak()
+     * Returns empty list since imunisasi table no longer exists
+     */
     fun getImunisasiByAnak(namaAnak: String): List<ImunisasiRow> {
-        val db     = dbHelper.readableDatabase
-        val result = mutableListOf<ImunisasiRow>()
-        var cursor: Cursor? = null
-        try {
-            cursor = db.query(
-                DatabaseHelper.TABLE_IMUNISASI,
-                null,
-                "${DatabaseHelper.COL_IMN_NAMA_ANAK} = ?",
-                arrayOf(namaAnak),
-                null, null,
-                "${DatabaseHelper.COL_IMN_ID} DESC"
-            )
-            while (cursor.moveToNext()) result.add(cursor.toRow())
-        } finally {
-            cursor?.close()
-            db.close()
-        }
-        return result
+        android.util.Log.w("ImunisasiRepository", "getImunisasiByAnak deprecated, returning empty list")
+        return emptyList()
     }
 
     private fun Cursor.toRow() = ImunisasiRow(
-        id         = getLong  (getColumnIndexOrThrow(DatabaseHelper.COL_IMN_ID)),
-        namaAnak   = getString(getColumnIndexOrThrow(DatabaseHelper.COL_IMN_NAMA_ANAK))   ?: "",
-        nikAnak    = getString(getColumnIndexOrThrow(DatabaseHelper.COL_IMN_NIK_ANAK))    ?: "",
-        namaOrtu   = getString(getColumnIndexOrThrow(DatabaseHelper.COL_IMN_NAMA_ORTU))   ?: "",
-        namaVaksin = getString(getColumnIndexOrThrow(DatabaseHelper.COL_IMN_NAMA_VAKSIN)) ?: "",
-        tglVaksin  = getString(getColumnIndexOrThrow(DatabaseHelper.COL_IMN_TGL_VAKSIN))  ?: "",
-        status     = getInt   (getColumnIndexOrThrow(DatabaseHelper.COL_IMN_STATUS))
+        id         = 0,
+        namaAnak   = "",
+        nikAnak    = "",
+        namaOrtu   = "",
+        namaVaksin = "",
+        tglVaksin  = "",
+        status     = 0
     )
 }

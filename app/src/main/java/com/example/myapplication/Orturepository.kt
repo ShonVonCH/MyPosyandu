@@ -3,6 +3,9 @@ package com.example.myapplication
 import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
 
 class OrtuRepository(context: Context) {
@@ -29,8 +32,12 @@ class OrtuRepository(context: Context) {
     ): Boolean {
         val db         = dbHelper.writableDatabase
         val posyanduId = getPosyanduIdFromLoggedInUser()
-        val now        = System.currentTimeMillis().toString()
-        val id         = UUID.randomUUID().toString()
+
+        // Format created_at: yyyy-MM-dd HH:mm:ss
+        val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        val now = sdf.format(Date())
+
+        val id = UUID.randomUUID().toString()
 
         val values = ContentValues().apply {
             put(DatabaseHelper.COL_ORTU_ID,          id)
@@ -49,7 +56,7 @@ class OrtuRepository(context: Context) {
             SQLiteDatabase.CONFLICT_IGNORE  // ignore jika username sudah ada
         )
 
-        android.util.Log.d("OrtuRepository", "Insert ortu '$username': result=$result posyanduId=$posyanduId")
+        android.util.Log.d("OrtuRepository", "Insert ortu '$username': result=$result posyanduId=$posyanduId createdAt=$now")
         return result != -1L
     }
 
@@ -65,7 +72,7 @@ class OrtuRepository(context: Context) {
         return exists
     }
 
-    // Ambil semua ortu (untuk keperluan list)
+    // Ambil semua ortu (untuk keperluan list & sync ke API)
     fun getAllOrtu(): List<OrtuData> {
         val db     = dbHelper.readableDatabase
         val result = mutableListOf<OrtuData>()

@@ -44,6 +44,7 @@ class FormDataViewModel : ViewModel() {
     var lastSavedOrangTua by mutableStateOf(FormOrangTuaData())
 
     var loggedInOrangTuaUsername by mutableStateOf("")
+    var loggedInOrangTuaId       by mutableStateOf("")   // ortu.id — dipakai untuk query anak & antrian
     var loggedInKaderId          by mutableStateOf("")
 
     // ── In-memory list (tetap dipakai untuk UI realtime) ───────────

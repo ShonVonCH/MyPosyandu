@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
+import android.util.Log
 
 private val RoleSelectedBg   = Color(0xFFB8EDD8)
 private val RoleSelectedText = Color(0xFF1E6B4E)
@@ -87,7 +88,7 @@ fun LoginScreen(
 
                 val usernameInput = username.trim()
                 val passwordInput = password.trim()
-                val roleInput     = if (selectedRole == "kader") "kader" else "orangtua"
+                val roleInput     = if (selectedRole == "kader") "kader" else "ortu"
 
                 if (usernameInput.isBlank() || passwordInput.isBlank()) {
                     loginError = "Username dan password tidak boleh kosong"
@@ -99,23 +100,40 @@ fun LoginScreen(
 
                 scope.launch {
                     try {
-                        // context dikirim ke fetchLoginFromApi untuk simpan user ke SQLite
                         val user = fetchLoginFromApi(usernameInput, passwordInput, roleInput, context)
 
                         if (user != null) {
+                            Log.d("LOGIN_DEBUG", "Login sukses: id=${user.id}, username=${user.username}, role=${user.role}")
+
                             // Sync data posyandu, jadwal, vaksin referensi ke SQLite lokal
                             try {
                                 SyncPosyandu.syncAll(context)
-                                android.util.Log.d("SYNC", "Sync berhasil")
+                                Log.d("SYNC", "Sync posyandu/jadwal/vaksin_ref berhasil")
                             } catch (e: Exception) {
-                                android.util.Log.e("SYNC", "Gagal sync: ${e.message}", e)
+                                Log.e("SYNC", "Gagal sync posyandu: ${e.message}", e)
+                            }
+
+                            // ═══════════════════════════════════════════════════════
+                            //  SYNC SEMUA DATA DARI API KE SQLITE LOKAL
+                            //  (anak, ortu, pemeriksaan, vaksin_riwayat)
+                            // ═══════════════════════════════════════════════════════
+                            try {
+                                val syncResult = syncAllDataFromApi(context)
+                                Log.d("SYNC_ALL", "Hasil sync: $syncResult")
+                            } catch (e: Exception) {
+                                Log.e("SYNC_ALL", "Gagal sync all data: ${e.message}", e)
                             }
 
                             if (selectedRole == "kader") {
+                                // Simpan kaderId ke ViewModel
                                 formViewModel.loggedInKaderId = user.id
+                                Log.d("LOGIN_DEBUG", "loggedInKaderId set to: ${user.id}")
                                 onNavigateToDashboard(user.username)
                             } else {
+                                // LOGIN ORTU: sama persis alur dengan kader
                                 formViewModel.loggedInOrangTuaUsername = user.username
+                                formViewModel.loggedInOrangTuaId       = user.id
+                                Log.d("LOGIN_DEBUG", "loggedInOrtuUsername=${user.username}, loggedInOrangTuaId=${user.id}")
                                 onNavigateToDashboardOrtu(user.username)
                             }
 
@@ -123,7 +141,7 @@ fun LoginScreen(
                             loginError = "Username, password, atau role salah"
                         }
                     } catch (e: Exception) {
-                        android.util.Log.e("LOGIN_DEBUG", "Error: ${e.message}", e)
+                        Log.e("LOGIN_DEBUG", "Error: ${e.message}", e)
                         loginError = "Gagal terhubung ke server"
                     } finally {
                         isLoading = false

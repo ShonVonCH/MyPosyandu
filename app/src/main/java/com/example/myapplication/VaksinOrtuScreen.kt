@@ -3,46 +3,82 @@ package com.example.myapplication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.*
+import androidx.compose.material.Divider
+import androidx.compose.material.Icon
+import androidx.compose.material.LinearProgressIndicator
+import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.*
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// ─────────────────────────────────────────────────────────────
-//  Local Colors
-// ─────────────────────────────────────────────────────────────
-private val VakHeaderBlue       = Color(0xFF1964A3)
-private val VakBackgroundDark   = Color(0xFF121212)
-private val VakSurfaceDark      = Color(0xFF2A2A2A)
+// ── Warna ──
+private val VakHeaderBlue        = Color(0xFF1964A3)
+private val VakBackgroundDark    = Color(0xFF121212)
+private val VakSurfaceDark       = Color(0xFF2A2A2A)
 private val VakSurfaceDarkBorder = Color(0xFF444444)
-private val VakActiveTabGreen   = Color(0xFF14634B)
-private val VakTextWhite        = Color(0xFFFFFFFF)
-private val VakTextGrey         = Color(0xFF888888)
+private val VakActiveTabGreen    = Color(0xFF14634B)
+private val VakTextWhite         = Color(0xFFFFFFFF)
+private val VakTextGrey          = Color(0xFF888888)
+private val VakBadgeMintBg       = Color(0xFF98E6C8)
+private val VakBadgeMintText     = Color(0xFF14634B)
+private val VakBadgeRedBg        = Color(0xFF5C2C2C)
+private val VakBadgeRedText      = Color(0xFFE55B5B)
+private val VakIconGreen         = Color(0xFF1E8F6A)
 
-// Badge Colors
-private val VakBadgeMintBg      = Color(0xFF98E6C8)
-private val VakBadgeMintText    = Color(0xFF14634B)
-private val VakBadgeRedBg       = Color(0xFF5C2C2C) // Merah gelap untuk background badge terlambat
-private val VakBadgeRedText     = Color(0xFFE55B5B) // Merah terang untuk teks terlambat
-private val VakIconGreen        = Color(0xFF1E8F6A)
+// ── Data class lokal (hanya untuk UI layer ini) ──
+// CATATAN: Jika VaksinRef, RiwayatVaksin, DatabaseHelper sudah ada
+// di file lain (misal DatabaseHelper.kt / VaksinRepository.kt),
+// HAPUS blok di bawah ini dan pastikan import-nya sudah benar.
+
+private data class VaksinOrtuGroup(
+    val usia: String,
+    val statusLengkap: Boolean,
+    val statusTerlambat: Boolean,
+    val items: List<VaksinOrtuItem>
+)
+
+private data class VaksinOrtuItem(
+    val nama: String,
+    val info: String,
+    val isLate: Boolean,
+    val isDone: Boolean
+)
+
+// ═══════════════════════════════════════════════════════════════
+// MAIN SCREEN
+// ═══════════════════════════════════════════════════════════════
 
 @Composable
 fun VaksinOrtuScreen(
@@ -52,9 +88,13 @@ fun VaksinOrtuScreen(
     onNavigateToPemeriksaan : () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val repo    = remember { VaksinRiwayatRepository(context) }
 
-    var namaAnak   by remember { mutableStateOf("") }
-    var usiaGender by remember { mutableStateOf("") }
+    var namaAnak    by remember { mutableStateOf("") }
+    var usiaGender  by remember { mutableStateOf("") }
+    var vaksinList  by remember { mutableStateOf<List<VaksinOrtuGroup>>(emptyList()) }
+    var totalVaksin by remember { mutableStateOf(0) }
+    var sudahVaksin by remember { mutableStateOf(0) }
 
     LaunchedEffect(anakId) {
         val db = DatabaseHelper(context).readableDatabase
@@ -64,45 +104,84 @@ fun VaksinOrtuScreen(
                     "WHERE ${DatabaseHelper.COL_ANAK_ID} = ?",
             arrayOf(anakId)
         )
+        var umurBulan = 0
         if (cursor.moveToFirst()) {
-            namaAnak   = cursor.getString(0) ?: ""
-            val tgl    = cursor.getString(1) ?: ""
+            namaAnak  = cursor.getString(0) ?: ""
+            val tgl   = cursor.getString(1) ?: ""
             val gender = cursor.getString(2) ?: ""
-            val umur   = hitungUmurBulan(tgl)
-            val gLabel = if (gender.lowercase().let { it == "l" || it == "laki-laki" }) "Laki-laki" else "Perempuan"
-            usiaGender = "$umur Bulan - $gLabel"
+            umurBulan = hitungUmurBulan(tgl)
+            val gLabel = if (gender.lowercase().let { it == "l" || it == "laki-laki" })
+                "Laki-laki" else "Perempuan"
+            usiaGender = "$umurBulan Bulan - $gLabel"
         }
         cursor.close()
         db.close()
+
+        val semuaVaksin    = repo.getVaksinSudahWaktunya(umurBulan)
+        val sudahDiberikan = repo.getVaksinSudahDiberikan(anakId)
+        val riwayat        = repo.getRiwayatByAnak(anakId)
+
+        totalVaksin = semuaVaksin.size
+        sudahVaksin = semuaVaksin.count { sudahDiberikan.contains(it.id) }
+
+        val grouped = semuaVaksin.groupBy { it.usiaBulan }.toSortedMap()
+
+        vaksinList = grouped.map { (usia, daftarVaksin) ->
+            val labelUsia = if (usia == 0) "Lahir" else "$usia Bulan"
+            val items = daftarVaksin.map { ref ->
+                val riwayatItem = riwayat.find { it.vaksinRefId == ref.id }
+                val sudah     = riwayatItem != null
+                val terlambat = !sudah && umurBulan > ref.batasBulan
+                VaksinOrtuItem(
+                    nama  = ref.nama,
+                    info  = when {
+                        sudah     -> "Diberikan: ${riwayatItem?.tanggalPemberian ?: ""}"
+                        terlambat -> "Terlambat - batas ${ref.batasBulan} bulan"
+                        else      -> "Belum diberikan"
+                    },
+                    isLate = terlambat,
+                    isDone = sudah
+                )
+            }
+            VaksinOrtuGroup(
+                usia            = labelUsia,
+                statusLengkap   = items.all { it.isDone },
+                statusTerlambat = items.any { it.isLate } && !items.all { it.isDone },
+                items           = items
+            )
+        }
     }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(VakBackgroundDark)
             .verticalScroll(rememberScrollState())
     ) {
-        // ── 1. HEADER BIRU ──────────────────────────────────
-        HeaderParentProfile(
-            namaAnak = namaAnak,
-            usiaGender = usiaGender,
+        VaksinOrtuHeader(
+            namaAnak      = namaAnak,
+            usiaGender    = usiaGender,
             onBackClicked = onNavigateBack
         )
-
-        // ── 2. TAB NAVIGASI (Vaksin Aktif) ──────────────────
-        TabsVaksin(
-            onNavigateToRingkasan = onNavigateToRingkasan,
+        VaksinOrtuTabs(
+            onNavigateToRingkasan   = onNavigateToRingkasan,
             onNavigateToPemeriksaan = onNavigateToPemeriksaan
         )
-
-        // ── 3. KONTEN VAKSIN ────────────────────────────────
-        VaksinContentArea()
-        
-        Spacer(modifier = Modifier.height(40.dp))
+        VaksinOrtuContent(
+            totalVaksin = totalVaksin,
+            sudahVaksin = sudahVaksin,
+            vaksinList  = vaksinList
+        )
+        Spacer(modifier = Modifier.height(80.dp))
     }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// HEADER
+// ═══════════════════════════════════════════════════════════════
+
 @Composable
-private fun HeaderParentProfile(
+private fun VaksinOrtuHeader(
     namaAnak: String,
     usiaGender: String,
     onBackClicked: () -> Unit
@@ -114,12 +193,14 @@ private fun HeaderParentProfile(
             .padding(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 24.dp)
     ) {
         Text(
-            text = "MyPosyandu",
-            color = VakTextWhite,
-            fontSize = 16.sp,
+            text       = "MyPosyandu",
+            color      = VakTextWhite,
+            fontSize   = 16.sp,
             fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+            textAlign  = TextAlign.Center,
+            modifier   = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp)
         )
 
         Row(
@@ -128,18 +209,23 @@ private fun HeaderParentProfile(
                 .border(1.dp, VakTextWhite.copy(alpha = 0.8f), RoundedCornerShape(6.dp))
                 .clickable(onClick = onBackClicked)
                 .padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment    = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = VakTextWhite, modifier = Modifier.size(18.dp))
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Back",
+                tint     = VakTextWhite,
+                modifier = Modifier.size(18.dp)
+            )
             Text("Semua Anak", color = VakTextWhite, fontSize = 14.sp)
         }
 
         Spacer(modifier = Modifier.height(20.dp))
 
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
+            modifier              = Modifier.fillMaxWidth(),
+            verticalAlignment     = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Box(
@@ -150,25 +236,28 @@ private fun HeaderParentProfile(
                     .background(VakHeaderBlue)
             )
             Column {
-                Text(namaAnak, color = VakTextWhite, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text(namaAnak,   color = VakTextWhite,                    fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 Text(usiaGender, color = VakTextWhite.copy(alpha = 0.8f), fontSize = 14.sp)
             }
         }
     }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// TABS
+// ═══════════════════════════════════════════════════════════════
+
 @Composable
-private fun TabsVaksin(
+private fun VaksinOrtuTabs(
     onNavigateToRingkasan: () -> Unit,
     onNavigateToPemeriksaan: () -> Unit
 ) {
     Row(
-        modifier = Modifier
+        modifier              = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // Tab Ringkasan (Tidak Aktif -> Navigasi)
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -181,7 +270,6 @@ private fun TabsVaksin(
             Text("Ringkasan", color = VakTextGrey, fontSize = 13.sp)
         }
 
-        // Tab Pemeriksaan (Tidak Aktif -> Navigasi)
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -194,7 +282,6 @@ private fun TabsVaksin(
             Text("Pemeriksaan", color = VakTextGrey, fontSize = 13.sp)
         }
 
-        // Tab Vaksin (AKTIF -> Tetap di halaman ini)
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -209,49 +296,53 @@ private fun TabsVaksin(
     Divider(color = VakSurfaceDarkBorder, thickness = 1.dp)
 }
 
+// ═══════════════════════════════════════════════════════════════
+// CONTENT
+// ═══════════════════════════════════════════════════════════════
+
 @Composable
-private fun VaksinContentArea() {
+private fun VaksinOrtuContent(
+    totalVaksin: Int,
+    sudahVaksin: Int,
+    vaksinList: List<VaksinOrtuGroup>
+) {
     Column(
-        modifier = Modifier
+        modifier              = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement   = Arrangement.spacedBy(16.dp)
     ) {
-        // 1. Card Kelengkapan Vaksin
-        CardKelengkapan()
+        VaksinOrtuKelengkapanCard(totalVaksin = totalVaksin, sudahVaksin = sudahVaksin)
 
-        // 2. Daftar Vaksin per Bulan
-        VaksinBulanCard(
-            usia = "Lahir",
-            statusLengkap = true,
-            items = listOf(
-                VaksinItemData("Hepatitis B (HB-0)", "10 Jul 2021 - Posyandu", isLate = false)
-            )
-        )
-
-        VaksinBulanCard(
-            usia = "1 Bulan",
-            statusLengkap = true,
-            items = listOf(
-                VaksinItemData("BCG", "10 Jul 2021 - Posyandu", isLate = false),
-                VaksinItemData("Polio 1", "10 Jul 2021 - Posyandu", isLate = false)
-            )
-        )
-
-        VaksinBulanCard(
-            usia = "2 Bulan",
-            statusLengkap = false,
-            items = listOf(
-                VaksinItemData("DPT-HB-Hib 1", "10 Jul 2021 - Posyandu", isLate = false),
-                VaksinItemData("Polio 2", "10 Jul 2021 - Posyandu", isLate = false),
-                VaksinItemData("IPV 1", "Terlambat - 15 Mar 2023", isLate = true)
-            )
-        )
+        if (vaksinList.isEmpty()) {
+            Box(
+                modifier         = Modifier.fillMaxWidth().padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Belum ada data vaksin", color = VakTextGrey, fontSize = 14.sp)
+            }
+        } else {
+            vaksinList.forEach { group ->
+                VaksinOrtuBulanCard(
+                    usia            = group.usia,
+                    statusLengkap   = group.statusLengkap,
+                    statusTerlambat = group.statusTerlambat,
+                    items           = group.items
+                )
+            }
+        }
     }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// KELENGKAPAN CARD
+// ═══════════════════════════════════════════════════════════════
+
 @Composable
-private fun CardKelengkapan() {
+private fun VaksinOrtuKelengkapanCard(totalVaksin: Int, sudahVaksin: Int) {
+    val persen  = if (totalVaksin > 0) (sudahVaksin * 100 / totalVaksin) else 0
+    val lengkap = totalVaksin > 0 && sudahVaksin == totalVaksin
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -261,45 +352,64 @@ private fun CardKelengkapan() {
             .padding(16.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier              = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment     = Alignment.CenterVertically
         ) {
-            Text("Kelengkapan vaksin", color = VakTextWhite, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "Kelengkapan vaksin",
+                color      = VakTextWhite,
+                fontSize   = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(16.dp))
-                    .background(VakBadgeMintBg)
+                    .background(if (lengkap) VakBadgeMintBg else VakBadgeRedBg)
                     .padding(horizontal = 10.dp, vertical = 4.dp)
             ) {
-                Text("100% Lengkap", color = VakBadgeMintText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    text       = if (lengkap) "$persen% Lengkap" else "$persen%",
+                    color      = if (lengkap) VakBadgeMintText else VakBadgeRedText,
+                    fontSize   = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
-        
+
         Spacer(modifier = Modifier.height(12.dp))
-        
+
         LinearProgressIndicator(
-            progress = 1f, // 100%
-            color = VakIconGreen,
-            backgroundColor = VakSurfaceDarkBorder,
-            modifier = Modifier
+            progress         = if (totalVaksin > 0) sudahVaksin.toFloat() / totalVaksin else 0f,
+            color            = if (lengkap) VakIconGreen else VakBadgeRedText,
+            backgroundColor  = VakSurfaceDarkBorder,
+            modifier         = Modifier
                 .fillMaxWidth()
                 .height(6.dp)
                 .clip(RoundedCornerShape(3.dp))
         )
-        
+
         Spacer(modifier = Modifier.height(8.dp))
-        
-        Text("15 dari 15 vaksin diberikan", color = VakTextWhite.copy(alpha = 0.7f), fontSize = 13.sp)
+
+        Text(
+            "$sudahVaksin dari $totalVaksin vaksin diberikan",
+            color    = VakTextWhite.copy(alpha = 0.7f),
+            fontSize = 13.sp
+        )
     }
 }
 
-// ── Model Data Dummy & Helper UI Vaksin ──
-
-data class VaksinItemData(val nama: String, val info: String, val isLate: Boolean)
+// ═══════════════════════════════════════════════════════════════
+// BULAN CARD
+// ═══════════════════════════════════════════════════════════════
 
 @Composable
-private fun VaksinBulanCard(usia: String, statusLengkap: Boolean, items: List<VaksinItemData>) {
+private fun VaksinOrtuBulanCard(
+    usia: String,
+    statusLengkap: Boolean,
+    statusTerlambat: Boolean,
+    items: List<VaksinOrtuItem>
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -308,11 +418,10 @@ private fun VaksinBulanCard(usia: String, statusLengkap: Boolean, items: List<Va
             .border(1.dp, VakSurfaceDarkBorder, RoundedCornerShape(12.dp))
             .padding(16.dp)
     ) {
-        // Header Card (Usia & Badge)
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier              = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment     = Alignment.CenterVertically
         ) {
             Text(usia, color = VakTextWhite, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             Box(
@@ -322,9 +431,13 @@ private fun VaksinBulanCard(usia: String, statusLengkap: Boolean, items: List<Va
                     .padding(horizontal = 10.dp, vertical = 4.dp)
             ) {
                 Text(
-                    text = if (statusLengkap) "Lengkap" else "Terlambat",
+                    text = when {
+                        statusLengkap   -> "Lengkap"
+                        statusTerlambat -> "Terlambat"
+                        else            -> "Belum Lengkap"
+                    },
                     color = if (statusLengkap) VakBadgeMintText else VakBadgeRedText,
-                    fontSize = 12.sp,
+                    fontSize   = 12.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -332,32 +445,52 @@ private fun VaksinBulanCard(usia: String, statusLengkap: Boolean, items: List<Va
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Daftar Item Vaksin
         items.forEachIndexed { index, item ->
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier          = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.Top
             ) {
                 Icon(
-                    imageVector = if (item.isLate) Icons.Default.Cancel else Icons.Default.CheckCircle,
+                    imageVector = if (item.isDone) Icons.Filled.CheckCircle else Icons.Filled.Cancel,
                     contentDescription = null,
-                    tint = if (item.isLate) VakBadgeRedText else VakIconGreen,
-                    modifier = Modifier.size(24.dp).padding(top = 2.dp)
+                    tint = when {
+                        item.isDone -> VakIconGreen
+                        item.isLate -> VakBadgeRedText
+                        else        -> VakTextGrey
+                    },
+                    modifier = Modifier
+                        .size(24.dp)
+                        .padding(top = 2.dp)
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
                     Text(item.nama, color = VakTextWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    Text(item.info, color = if (item.isLate) VakBadgeRedText else VakIconGreen, fontSize = 13.sp)
+                    Text(
+                        item.info,
+                        color = when {
+                            item.isDone -> VakIconGreen
+                            item.isLate -> VakBadgeRedText
+                            else        -> VakTextGrey
+                        },
+                        fontSize = 13.sp
+                    )
                 }
             }
-            
-            // Tambahkan garis bawah jika bukan item terakhir
+
             if (index < items.size - 1) {
-                Divider(color = VakSurfaceDarkBorder, thickness = 1.dp, modifier = Modifier.padding(vertical = 12.dp))
+                Divider(
+                    color     = VakSurfaceDarkBorder,
+                    thickness = 1.dp,
+                    modifier  = Modifier.padding(vertical = 12.dp)
+                )
             }
         }
     }
 }
+
+// ═══════════════════════════════════════════════════════════════
+// PREVIEW
+// ═══════════════════════════════════════════════════════════════
 
 @Preview(showBackground = true)
 @Composable

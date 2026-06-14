@@ -11,13 +11,12 @@ import org.json.JSONArray
 
 object SyncPosyandu {
 
-    // Pakai httpClient yang sama dengan fetchLoginFromApi (sudah ada cookie __test)
     suspend fun syncAll(context: Context) {
         withContext(Dispatchers.IO) {
             try {
                 syncPosyandu(context)
                 syncJadwal(context)
-                syncVaksinRef(context)  // ← tambah ini
+                syncVaksinRef(context)
             } catch (e: Exception) {
                 Log.e("SyncPosyandu", "Sync gagal: ${e.message}", e)
             }
@@ -96,7 +95,6 @@ object SyncPosyandu {
         Log.d("SyncPosyandu", "VaksinRef selesai: ${array.length()} data")
     }
 
-    // Pakai httpClient dari ApiService.kt yang sudah solve challenge & punya cookie
     private fun fetchJson(url: String): String? {
         return try {
             val request = Request.Builder()
@@ -104,6 +102,7 @@ object SyncPosyandu {
                 .header("User-Agent", "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36")
                 .header("Accept", "application/json")
                 .build()
+            // httpClient sudah public dari ApiService.kt
             val response = httpClient.newCall(request).execute()
             val body = response.body?.string()
             Log.d("SyncPosyandu", "Response [$url]: code=${response.code} body=${body?.take(100)}")

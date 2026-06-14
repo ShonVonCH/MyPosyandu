@@ -27,6 +27,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.Calendar
+import kotlinx.coroutines.launch
 
 // ─────────────────────────────────────────────────────────────
 //  Design tokens
@@ -106,9 +107,16 @@ fun ImunisasiScreen(
     // vaksinRefId -> tanggalPemberian (dari DB vaksin_riwayat)
     val vaksinDiberikan = remember { mutableStateMapOf<String, String>() }
 
+    // Load alamat posyandu sekali saat screen dibuka (untuk DB, tidak ditampilkan di UI)
+    var alamatPosyandu by remember { mutableStateOf("Posyandu") }
+
     // Load dari DB saat screen dibuka
     LaunchedEffect(nikAnak) {
         if (nikAnak.isBlank()) return@LaunchedEffect
+
+        // Ambil alamat posyandu untuk disimpan ke DB (tidak ditampilkan di UI)
+        alamatPosyandu = repo.getAlamatPosyandu()
+
         val riwayat = repo.getRiwayatByAnak(nikAnak)
         riwayat.forEach { row ->
             vaksinDiberikan[row.vaksinRefId] = row.tanggalPemberian
@@ -153,6 +161,7 @@ fun ImunisasiScreen(
                     umurBulan       = umurBulan,
                     vaksinDiberikan = vaksinDiberikan,
                     repo            = repo,
+                    alamatPosyandu  = alamatPosyandu,
                     onSimpan        = { refId, tanggal ->
                         vaksinDiberikan[refId] = tanggal
                         onSimpanVaksin(refId, tanggal)
@@ -287,6 +296,7 @@ fun TabCatat(
     umurBulan      : Int,
     vaksinDiberikan: Map<String, String>,
     repo           : VaksinRiwayatRepository,
+    alamatPosyandu : String,
     onSimpan       : (vaksinRefId: String, tanggal: String) -> Unit
 ) {
     val context  = LocalContext.current
@@ -465,7 +475,9 @@ fun TabCatat(
             }
 
             // ── Tombol Simpan ─────────────────────────────────
+            // Lokasi (alamat posyandu) tidak ditampilkan di UI, tapi tetap dikirim ke DB
             val bisaSimpan = selectedVaksin != null && tanggalDipilih.isNotEmpty()
+            val scope = rememberCoroutineScope()
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -473,15 +485,28 @@ fun TabCatat(
                     .background(if (bisaSimpan) HeaderGreen else Color(0xFF444444))
                     .clickable(enabled = bisaSimpan) {
                         val ref = selectedVaksin!!
+
+                        // 1. Simpan ke SQLite lokal
                         repo.insertRiwayat(
                             anakId           = anakId,
                             vaksinRefId      = ref.id,
                             kaderId          = kaderId,
-                            tanggalPemberian = tanggalDipilih
+                            tanggalPemberian = tanggalDipilih,
+                            lokasi           = alamatPosyandu
                         )
                         onSimpan(ref.id, tanggalDipilih)
                         selectedVaksin = null
                         tanggalDipilih = ""
+
+                        // 2. SYNC KE API (background)
+                        scope.launch {
+                            try {
+                                val resultSync = syncVaksinRiwayatToApi(context)
+                                android.util.Log.d("SYNC_VAKSIN", resultSync.message)
+                            } catch (e: Exception) {
+                                android.util.Log.e("SYNC_VAKSIN", "Gagal sync: ${e.message}", e)
+                            }
+                        }
                     }
                     .padding(vertical = 14.dp),
                 contentAlignment = Alignment.Center

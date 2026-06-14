@@ -16,6 +16,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import android.util.Log
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -77,25 +78,32 @@ fun AppNavigation() {
         composable("dashboard") {
             val context = LocalContext.current
 
-            var totalAnak  by remember { mutableStateOf(0) }
-            var anakHadir  by remember { mutableStateOf(0) }
-            var hadirBulan by remember { mutableStateOf(0) }
+            var totalAnak      by remember { mutableStateOf(0) }
+            var anakHadir      by remember { mutableStateOf(0) }
+            var hadirBulan     by remember { mutableStateOf(0) }
+            var jadwalBulanIni by remember { mutableStateOf(0) }
 
             LaunchedEffect(Unit) {
                 val dashRepo = DashboardRepository(context)
-                totalAnak    = dashRepo.getTotalAnak()
-                anakHadir    = dashRepo.getAnakHadirHariIni()
-                hadirBulan   = dashRepo.getAnakHadirBulanIni()
+                totalAnak      = dashRepo.getTotalAnak()
+                anakHadir      = dashRepo.getAnakHadirHariIni()
+                hadirBulan     = dashRepo.getAnakHadirBulanIni()
+                jadwalBulanIni = dashRepo.getJadwalBulanIni()
+
+                Log.d("DASHBOARD_DEBUG", "totalAnak=$totalAnak, anakHadir=$anakHadir, hadirBulan=$hadirBulan, jadwalBulan=$jadwalBulanIni")
             }
 
             DashboardScreen(
                 totalAnak            = totalAnak,
                 anakHadir            = anakHadir,
                 anakHadirBulan       = hadirBulan,
+                jadwalBulanIni       = jadwalBulanIni,
                 onNavigateToDataAnak = {
                     safeNavigate { navController.navigate("data_anak") { launchSingleTop = true } }
                 },
-                onNavigateToLaporan  = { }
+                onNavigateToLaporan  = {
+                    safeNavigate { navController.navigate("laporan") { launchSingleTop = true } }
+                }
             )
         }
 
@@ -168,10 +176,59 @@ fun AppNavigation() {
             )
         }
 
+        composable("laporan") {
+            val username = formViewModel.loggedInOrangTuaUsername   // atau ambil dari kader
+
+            LaporanScreen(
+                onNavigateBack      = { navController.popBackStack() },
+                onNavigateToHome    = {
+                    safeNavigate {
+                        navController.navigate("dashboard") {
+                            popUpTo("dashboard") { inclusive = false }
+                            launchSingleTop = true
+                        }
+                    }
+                },
+                onNavigateToPanggil = {
+                    safeNavigate {
+                        navController.navigate("antrian_kader") { launchSingleTop = true }
+                    }
+                },
+                onNavigateToUser    = {
+                    // TODO: sambungkan ke halaman User/Profil jika sudah ada
+                }
+            )
+        }
+
+        // ── ANTRIAN KADER ────────────────────────────────────────────────────
+        composable("antrian_kader") {
+            AntrianKaderScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToHome = {
+                    safeNavigate {
+                        navController.navigate("dashboard") {
+                            popUpTo("dashboard") { inclusive = false }
+                            launchSingleTop = true
+                        }
+                    }
+                },
+                onNavigateToPanggil = {
+                    // Sudah di halaman panggil
+                },
+                onNavigateToLaporan = {
+                    safeNavigate {
+                        navController.navigate("laporan") { launchSingleTop = true }
+                    }
+                }
+            )
+        }
+
         // ── ANTRIAN ORTU ─────────────────────────────────────────────────────
         composable("antrian_ortu") {
             val username = formViewModel.loggedInOrangTuaUsername
+            val ortuId   = formViewModel.loggedInOrangTuaId
             AntrianOrtuScreen(
+                userId             = ortuId,
                 onNavigateToHome   = {
                     safeNavigate {
                         navController.navigate("dashboard_orangtua/$username") { launchSingleTop = true }
@@ -187,6 +244,7 @@ fun AppNavigation() {
         composable("tiket_antrian") {
             val username = formViewModel.loggedInOrangTuaUsername
             TiketAntrianScreen(
+                username            = username,
                 onNavigateToHome    = {
                     safeNavigate {
                         navController.navigate("dashboard_orangtua/$username") { launchSingleTop = true }

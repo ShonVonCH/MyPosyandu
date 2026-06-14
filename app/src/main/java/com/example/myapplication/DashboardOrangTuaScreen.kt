@@ -24,6 +24,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.text.SimpleDateFormat
+import java.util.*
 
 private val DashHeaderBlue        = Color(0xFF1964A3)
 private val DashBackgroundDark    = Color(0xFF121212)
@@ -36,7 +38,7 @@ private val DashAvatarMint        = Color(0xFF98E6C8)
 @Composable
 fun DashboardOrangTuaScreen(
     username              : String         = "",
-    onNavigateToDetailAnak: (String) -> Unit = {},  // param: anakId
+    onNavigateToDetailAnak: (String) -> Unit = {},
     onNavigateToHome      : () -> Unit       = {},
     onNavigateToTicket    : () -> Unit       = {},
     onNavigateToFood      : () -> Unit       = {},
@@ -46,6 +48,8 @@ fun DashboardOrangTuaScreen(
 
     var namaOrtu   by remember { mutableStateOf("") }
     var anakList   by remember { mutableStateOf<List<AnakData>>(emptyList()) }
+    var jadwalBerikutnya by remember { mutableStateOf<JadwalBerikutnya?>(null) }
+    var posyanduInfo by remember { mutableStateOf("") }
 
     LaunchedEffect(username) {
         if (username.isBlank()) return@LaunchedEffect
@@ -64,6 +68,65 @@ fun DashboardOrangTuaScreen(
             namaOrtu = cursorOrtu.getString(1) ?: ""
         }
         cursorOrtu.close()
+
+        // Ambil posyandu info dari user login
+        val cursorUser = db.rawQuery(
+            """
+            SELECT p.${DatabaseHelper.COL_POSYANDU_NAMA}, p.${DatabaseHelper.COL_POSYANDU_KELURAHAN}, p.${DatabaseHelper.COL_POSYANDU_RW}, p.${DatabaseHelper.COL_POSYANDU_ALAMAT}
+            FROM ${DatabaseHelper.TABLE_USERS} u
+            LEFT JOIN ${DatabaseHelper.TABLE_POSYANDU} p ON u.${DatabaseHelper.COL_USERS_POSYANDU_ID} = p.${DatabaseHelper.COL_POSYANDU_ID}
+            LIMIT 1
+            """.trimIndent(), null
+        )
+        if (cursorUser.moveToFirst()) {
+            val nama = cursorUser.getString(0) ?: "Posyandu"
+            val kel  = cursorUser.getString(1) ?: ""
+            val rw   = cursorUser.getString(2) ?: ""
+            val alm  = cursorUser.getString(3) ?: ""
+            posyanduInfo = buildString {
+                append(nama)
+                if (kel.isNotBlank()) append(", Kel. $kel")
+                if (rw.isNotBlank()) append(", RW-$rw")
+                if (alm.isNotBlank()) append(" - $alm")
+            }
+        }
+        cursorUser.close()
+
+        // Ambil jadwal posyandu berikutnya dari DB lokal (sudah sync dari API)
+        val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        val cursorJadwal = db.rawQuery(
+            """
+            SELECT ${DatabaseHelper.COL_JADWAL_TANGGAL}, ${DatabaseHelper.COL_JADWAL_JAM_MULAI}, 
+                   ${DatabaseHelper.COL_JADWAL_JAM_SELESAI}, ${DatabaseHelper.COL_JADWAL_LOKASI}
+            FROM ${DatabaseHelper.TABLE_JADWAL_POSYANDU}
+            WHERE ${DatabaseHelper.COL_JADWAL_TANGGAL} >= ?
+              AND LOWER(${DatabaseHelper.COL_JADWAL_STATUS}) = 'terjadwal'
+            ORDER BY ${DatabaseHelper.COL_JADWAL_TANGGAL} ASC
+            LIMIT 1
+            """.trimIndent(),
+            arrayOf(today)
+        )
+        if (cursorJadwal.moveToFirst()) {
+            val tgl = cursorJadwal.getString(0) ?: ""
+            val jamMulai = cursorJadwal.getString(1) ?: ""
+            val jamSelesai = cursorJadwal.getString(2) ?: ""
+            val lokasi = cursorJadwal.getString(3) ?: ""
+
+            val tglFormatted = try {
+                val sdfIn = SimpleDateFormat("yyyy-MM-dd", Locale("id", "ID"))
+                val sdfOut = SimpleDateFormat("EEEE, d MMMM yyyy", Locale("id", "ID"))
+                val date = sdfIn.parse(tgl)
+                date?.let { sdfOut.format(it) } ?: tgl
+            } catch (e: Exception) { tgl }
+
+            jadwalBerikutnya = JadwalBerikutnya(
+                lokasi = lokasi,
+                tanggal = tglFormatted,
+                jamMulai = jamMulai.take(5),
+                jamSelesai = jamSelesai.take(5)
+            )
+        }
+        cursorJadwal.close()
 
         // Ambil anak milik ortu ini
         if (ortuId.isNotBlank()) {
@@ -84,7 +147,7 @@ fun DashboardOrangTuaScreen(
                     id           = id,
                     nama         = nama,
                     umurBulan    = hitungUmurBulan(tglLahir),
-                    tanggal      = tglLahir,
+                    tanggal      = formatTanggalSingkat(tglLahir),
                     namaOrangTua = namaOrtu,
                     jenisKelamin = when (gender.trim().lowercase()) {
                         "laki-laki", "l" -> "L"
@@ -118,10 +181,11 @@ fun DashboardOrangTuaScreen(
         ) {
             HeaderDashboardOrtu(
                 namaOrangTua    = namaOrtu,
-                jumlahAnakTotal = anakList.size
+                jumlahAnakTotal = anakList.size,
+                posyanduInfo    = posyanduInfo
             )
 
-            BannerJadwalOrtu()
+            BannerJadwalOrtu(jadwal = jadwalBerikutnya)
 
             Text(
                 text       = "Anak saya",
@@ -154,7 +218,12 @@ fun DashboardOrangTuaScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            // Tombol Export Database untuk debug
+            Spacer(modifier = Modifier.height(16.dp))
+            ExportDatabaseButton(modifier = Modifier.padding(horizontal = 16.dp))
+
+            // Spacer supaya konten tidak ketimpa bottom nav
+            Spacer(modifier = Modifier.height(80.dp))
         }
     }
 }
@@ -168,18 +237,24 @@ private fun BottomNavBarOrtu(
     onFoodClick   : () -> Unit,
     onProfileClick: () -> Unit
 ) {
-    Row(
-        modifier              = Modifier
+    Box(
+        modifier = Modifier
             .fillMaxWidth()
             .background(DashSurfaceDark)
-            .padding(vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment     = Alignment.CenterVertically
+            .navigationBarsPadding()
     ) {
-        NavIconOrtu(Icons.Outlined.Home,               isActive = true,  onClick = onHomeClick)
-        NavIconOrtu(Icons.Outlined.ConfirmationNumber, isActive = false, onClick = onTicketClick)
-        NavIconOrtu(Icons.Outlined.Restaurant,         isActive = false, onClick = onFoodClick)
-        NavIconOrtu(Icons.Outlined.Person,             isActive = false, onClick = onProfileClick)
+        Row(
+            modifier              = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment     = Alignment.CenterVertically
+        ) {
+            NavIconOrtu(Icons.Outlined.Home,               isActive = true,  onClick = onHomeClick)
+            NavIconOrtu(Icons.Outlined.ConfirmationNumber, isActive = false, onClick = onTicketClick)
+            NavIconOrtu(Icons.Outlined.Restaurant,         isActive = false, onClick = onFoodClick)
+            NavIconOrtu(Icons.Outlined.Person,             isActive = false, onClick = onProfileClick)
+        }
     }
 }
 
@@ -196,7 +271,11 @@ private fun NavIconOrtu(icon: ImageVector, isActive: Boolean, onClick: () -> Uni
 // ── Header ────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun HeaderDashboardOrtu(namaOrangTua: String, jumlahAnakTotal: Int) {
+private fun HeaderDashboardOrtu(
+    namaOrangTua    : String,
+    jumlahAnakTotal : Int,
+    posyanduInfo    : String
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -224,7 +303,11 @@ private fun HeaderDashboardOrtu(namaOrangTua: String, jumlahAnakTotal: Int) {
                     fontSize   = 20.sp,
                     fontWeight = FontWeight.Bold
                 )
-                Text(text = "Posyandu Mawar, RW-04", color = DashTextWhite.copy(alpha = 0.8f), fontSize = 14.sp)
+                Text(
+                    text = posyanduInfo.ifBlank { "Posyandu" },
+                    color = DashTextWhite.copy(alpha = 0.8f),
+                    fontSize = 14.sp
+                )
             }
 
             Column(
@@ -244,7 +327,14 @@ private fun HeaderDashboardOrtu(namaOrangTua: String, jumlahAnakTotal: Int) {
 // ── Banner Jadwal ─────────────────────────────────────────────────────────────
 
 @Composable
-private fun BannerJadwalOrtu() {
+private fun BannerJadwalOrtu(jadwal: JadwalBerikutnya?) {
+    val jadwalText = if (jadwal != null) {
+        "${jadwal.tanggal} • ${jadwal.jamMulai}–${jadwal.jamSelesai}"
+    } else {
+        "Belum ada jadwal terjadwal"
+    }
+    val lokasiText = jadwal?.lokasi ?: ""
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -257,9 +347,24 @@ private fun BannerJadwalOrtu() {
             Icon(Icons.Default.CalendarMonth, "Jadwal", tint = DashTextWhite, modifier = Modifier.size(24.dp))
             Spacer(modifier = Modifier.width(12.dp))
             Column {
-                Text(text = "Jadwal Posyandu berikutnya", color = DashTextWhite.copy(alpha = 0.8f), fontSize = 12.sp)
-                Text(text = "Senin, 2 Juni 2025 -- 08:00", color = DashTextWhite, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                Text(text = "Balai RW 04 - Harap datang tepat waktu", color = DashTextWhite.copy(alpha = 0.8f), fontSize = 12.sp)
+                Text(
+                    text = if (jadwal != null) "Jadwal Posyandu berikutnya" else "Jadwal Posyandu",
+                    color = DashTextWhite.copy(alpha = 0.8f),
+                    fontSize = 12.sp
+                )
+                Text(
+                    text = jadwalText,
+                    color = DashTextWhite,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                if (lokasiText.isNotBlank()) {
+                    Text(
+                        text = "$lokasiText - Harap datang tepat waktu",
+                        color = DashTextWhite.copy(alpha = 0.8f),
+                        fontSize = 12.sp
+                    )
+                }
             }
         }
     }

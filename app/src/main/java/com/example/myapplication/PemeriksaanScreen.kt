@@ -41,6 +41,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import android.util.Log
+import kotlinx.coroutines.launch
 
 // ─────────────────────────────────────────────────────────────
 //  Design tokens
@@ -100,7 +102,6 @@ fun statusToProgressColor(warna: StatusWarna) = when (warna) {
 //  SCREEN
 // ════════════════════════════════════════════════════════════
 
-// Ubah parameter onSimpan di PemeriksaanScreen
 @Composable
 fun PemeriksaanScreen(
     anakId         : String   = "",
@@ -111,14 +112,38 @@ fun PemeriksaanScreen(
     onNavigateBack : () -> Unit = {},
     onSimpan       : (beratBadan: String, tinggiBadan: String, analisis: HasilAnalisis) -> Unit = { _, _, _ -> }
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // Fallback kaderId dari DB kalau kosong
+    val kaderIdEffect = remember { mutableStateOf(kaderId) }
+    LaunchedEffect(kaderId) {
+        if (kaderId.isBlank()) {
+            val db = DatabaseHelper(context).readableDatabase
+            val cursor = db.rawQuery(
+                "SELECT ${DatabaseHelper.COL_USERS_ID} FROM ${DatabaseHelper.TABLE_USERS} LIMIT 1",
+                null
+            )
+            if (cursor.moveToFirst()) {
+                kaderIdEffect.value = cursor.getString(0) ?: ""
+                Log.d("PEMERIKSAAN_DEBUG", "kaderId fallback dari DB: ${kaderIdEffect.value}")
+            }
+            cursor.close()
+            db.close()
+        } else {
+            kaderIdEffect.value = kaderId
+            Log.d("PEMERIKSAAN_DEBUG", "kaderId dari param: $kaderId")
+        }
+    }
+
     var beratBadan    by remember { mutableStateOf("") }
     var tinggiBadan   by remember { mutableStateOf("") }
     var lingkarKepala by remember { mutableStateOf("") }
     var lingkarLengan by remember { mutableStateOf("") }
-    var tanggal       by remember { mutableStateOf("26/05/2025") }
+    var tanggal       by remember { mutableStateOf("12/06/2026") }
     var activeTab     by remember { mutableStateOf(0) }
     var hasil         by remember { mutableStateOf<HasilAnalisis?>(null) }
-    val context = LocalContext.current
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -158,8 +183,11 @@ fun PemeriksaanScreen(
                             activeTab    = 1
                             onSimpan(beratBadan, tinggiBadan, analisis)
 
-                            // ── Simpan ke tabel anak_pemeriksaan ──────────────────
+                            // ── Simpan ke tabel pemeriksaan ──────────────────
                             val repo = PemeriksaanRepository(context)
+                            val kaderIdFinal = kaderIdEffect.value
+
+                            Log.d("PEMERIKSAAN_DEBUG", "Insert dengan kaderId=$kaderIdFinal, anakId=$anakId, tgl=$tanggal")
 
                             // Map statusBBU ke nilai yang diterima DB CHECK constraint
                             val statusGiziDb = when (analisis.statusBBU.lowercase().trim()) {
@@ -167,13 +195,13 @@ fun PemeriksaanScreen(
                                 "gizi kurang"                   -> "gizi_kurang"
                                 "gizi lebih"                    -> "gizi_lebih"
                                 "obesitas"                      -> "obesitas"
-                                else                            -> "normal"  // "Gizi Baik" / "Normal"
+                                else                            -> "normal"
                             }
 
-                            repo.insertPemeriksaan(
+                            val result = repo.insertPemeriksaan(
                                 id         = java.util.UUID.randomUUID().toString(),
                                 anakId     = anakId,
-                                kaderId    = kaderId,
+                                kaderId    = kaderIdFinal,
                                 tgl        = tanggal,
                                 bb         = beratBadan.toDoubleOrNull() ?: 0.0,
                                 tb         = tinggiBadan.toDoubleOrNull() ?: 0.0,
@@ -184,6 +212,17 @@ fun PemeriksaanScreen(
                                 statusGizi = statusGiziDb,
                                 catatan    = ""
                             )
+                            Log.d("PEMERIKSAAN_DEBUG", "Insert result=$result")
+
+                            // ── SYNC KE API ──────────────────────────────────
+                            scope.launch {
+                                try {
+                                    val resultSync = syncPemeriksaanToApi(context)
+                                    Log.d("SYNC_PMRK", resultSync.message)
+                                } catch (e: Exception) {
+                                    Log.e("SYNC_PMRK", "Gagal sync: ${e.message}", e)
+                                }
+                            }
                         }
                     }
                 )
@@ -372,7 +411,7 @@ private fun TabHasilContent(
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text(text = "Indikator WHO", color = TextWhite, fontSize = 13.sp, fontWeight = FontWeight.Bold)
 
-                // ▸ Label dinamis: "TB/U - <status>" misal "TB/U - Normal"
+                // ▸ Label dinamis: "TB/U - <status>"
                 WHOIndicatorBlock(
                     title       = "TB/U - ${hasil.statusTBU}",
                     zScore      = "Z-Score: ${hasil.zScoreTBU}",
@@ -384,7 +423,7 @@ private fun TabHasilContent(
 
                 Divider(color = WHOCardBorder, thickness = 0.8.dp)
 
-                // ▸ Label dinamis: "BB/U - <status>" misal "BB/U - Gizi Baik"
+                // ▸ Label dinamis: "BB/U - <status>"
                 WHOIndicatorBlock(
                     title       = "BB/U - ${hasil.statusBBU}",
                     zScore      = "Z-Score: ${hasil.zScoreBBU}",
@@ -571,23 +610,13 @@ private fun TabGrafikBBUContent(
 //  LINE CHART — Grafik Garis WHO
 // ════════════════════════════════════════════════════════════
 
-/**
- * Menggambar grafik garis WHO dengan:
- * - Garis median (hijau)
- * - Garis +2 SD dan -2 SD (kuning, putus-putus)
- * - Garis +3 SD dan -3 SD (merah, putus-putus)
- * - Titik + garis posisi anak saat ini (merah solid)
- *
- * Semua nilai diplot sebagai nilai absolut (cm/kg) pada sumbu Y,
- * dengan sumbu X adalah usia (bulan).
- */
 @Composable
 private fun GrafikLineCard(
     judul       : String,
     namaAnak    : String,
     umurBulan   : Int,
     tabel       : Map<Int, Pair<Double, Double>>,
-    nilaiAnak   : Double?,   // z-score anak
+    nilaiAnak   : Double?,
     satuanLabel : String
 ) {
     Box(
@@ -617,7 +646,6 @@ private fun GrafikLineCard(
             val minAge = keys.first().toFloat()
             val maxAge = keys.last().toFloat()
 
-            // Kalkulasi semua nilai untuk min/max Y
             val allValues = keys.flatMap { bulan ->
                 val (med, sd) = tabel[bulan]!!
                 listOf(med - sd * 3, med + sd * 3)
@@ -625,7 +653,6 @@ private fun GrafikLineCard(
             val minY = (allValues.min() - 1).toFloat()
             val maxY = (allValues.max() + 1).toFloat()
 
-            // Helper: konversi (age, value) -> Offset dalam Canvas
             fun toOffset(age: Float, value: Float, w: Float, h: Float): Offset {
                 val x = (age - minAge) / (maxAge - minAge) * w
                 val y = h - (value - minY) / (maxY - minY) * h
@@ -633,7 +660,7 @@ private fun GrafikLineCard(
             }
 
             val chartHeight = 220.dp
-            val leftPadding = 36.dp  // ruang label Y axis
+            val leftPadding = 36.dp
 
             Canvas(
                 modifier = Modifier
@@ -644,7 +671,7 @@ private fun GrafikLineCard(
                 val w = size.width
                 val h = size.height
 
-                // ── Grid horizontal (setiap nilai bulat) ────────
+                // Grid horizontal
                 val gridStep = if ((maxY - minY) > 50) 20f else if ((maxY - minY) > 20) 10f else 5f
                 var gridVal = (minY / gridStep).toInt() * gridStep
                 while (gridVal <= maxY) {
@@ -658,7 +685,7 @@ private fun GrafikLineCard(
                     gridVal += gridStep
                 }
 
-                // ── Grid vertikal (per interval umur) ───────────
+                // Grid vertikal
                 keys.forEach { bulan ->
                     val gx = (bulan - minAge) / (maxAge - minAge) * w
                     drawLine(
@@ -669,7 +696,6 @@ private fun GrafikLineCard(
                     )
                 }
 
-                // Helper: gambar path dari list of Offset
                 fun drawLinePath(points: List<Offset>, color: Color, strokeWidth: Float, dashed: Boolean = false) {
                     if (points.size < 2) return
                     val path = Path().apply {
@@ -677,7 +703,6 @@ private fun GrafikLineCard(
                         points.drop(1).forEach { lineTo(it.x, it.y) }
                     }
                     if (dashed) {
-                        // Simulasi dashed: gambar segmen pendek bergantian
                         for (i in 0 until points.size - 1) {
                             val p1 = points[i]
                             val p2 = points[i + 1]
@@ -703,19 +728,19 @@ private fun GrafikLineCard(
                     }
                 }
 
-                // ── Garis ±3 SD (merah, putus-putus) ────────────
+                // Garis ±3 SD
                 val lineNeg3 = keys.map { b -> toOffset(b.toFloat(), (tabel[b]!!.first - tabel[b]!!.second * 3).toFloat(), w, h) }
                 val linePos3 = keys.map { b -> toOffset(b.toFloat(), (tabel[b]!!.first + tabel[b]!!.second * 3).toFloat(), w, h) }
                 drawLinePath(lineNeg3, ChartColorSD3.copy(alpha = 0.7f), 1.5f, dashed = true)
                 drawLinePath(linePos3, ChartColorSD3.copy(alpha = 0.7f), 1.5f, dashed = true)
 
-                // ── Garis ±2 SD (kuning, putus-putus) ───────────
+                // Garis ±2 SD
                 val lineNeg2 = keys.map { b -> toOffset(b.toFloat(), (tabel[b]!!.first - tabel[b]!!.second * 2).toFloat(), w, h) }
                 val linePos2 = keys.map { b -> toOffset(b.toFloat(), (tabel[b]!!.first + tabel[b]!!.second * 2).toFloat(), w, h) }
                 drawLinePath(lineNeg2, ChartColorSD2.copy(alpha = 0.8f), 1.5f, dashed = true)
                 drawLinePath(linePos2, ChartColorSD2.copy(alpha = 0.8f), 1.5f, dashed = true)
 
-                // ── Area fill antara -2 SD dan +2 SD (hijau muda) ─
+                // Area fill
                 val areaPath = Path().apply {
                     moveTo(lineNeg2[0].x, lineNeg2[0].y)
                     lineNeg2.drop(1).forEach { lineTo(it.x, it.y) }
@@ -727,11 +752,11 @@ private fun GrafikLineCard(
                     color = ChartColorMedian.copy(alpha = 0.08f)
                 )
 
-                // ── Garis median (hijau solid) ───────────────────
+                // Garis median
                 val lineMedian = keys.map { b -> toOffset(b.toFloat(), tabel[b]!!.first.toFloat(), w, h) }
                 drawLinePath(lineMedian, ChartColorMedian, 2.5f, dashed = false)
 
-                // ── Titik + garis vertikal posisi anak ───────────
+                // Titik anak
                 if (nilaiAnak != null) {
                     val (medAtAge, sdAtAge) = interpolasi(umurBulan, tabel)
                     val nilaiAbs = medAtAge + nilaiAnak * sdAtAge
@@ -739,7 +764,6 @@ private fun GrafikLineCard(
                     val xAnak = (umurBulan - minAge) / (maxAge - minAge) * w
                     val yAnak = h - (nilaiAbs.toFloat() - minY) / (maxY - minY) * h
 
-                    // Garis vertikal putus-putus pada usia anak
                     for (step in 0 until 20 step 2) {
                         val y1 = h * step / 20f
                         val y2 = h * (step + 1) / 20f
@@ -752,7 +776,6 @@ private fun GrafikLineCard(
                         )
                     }
 
-                    // Titik anak (lingkaran berisi + outline)
                     drawCircle(
                         color  = ChartColorAnak.copy(alpha = 0.25f),
                         radius = 12f,
@@ -771,7 +794,7 @@ private fun GrafikLineCard(
                 }
             }
 
-            // ── Label sumbu X (usia bulan) di bawah canvas ──────
+            // Label sumbu X
             Row(
                 modifier              = Modifier
                     .fillMaxWidth()
@@ -1026,8 +1049,8 @@ fun TanggalCard(
     modifier        : Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
-    // Parse tanggal existing ke Calendar (format dd/MM/yyyy)
     val calendar = remember {
         Calendar.getInstance().also { cal ->
             runCatching {

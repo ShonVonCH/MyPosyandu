@@ -35,9 +35,6 @@ private val DetailInfoVaccineGreen = Color(0xFF98E6C8)
 private val DetailTextVaccineGreen = Color(0xFF14634B)
 private val DetailVaccineMintText  = Color(0xFF42B883)
 
-// ════════════════════════════════════════════════════════════
-//  Data class untuk menghindari type inference error pada when
-// ════════════════════════════════════════════════════════════
 private data class GrowthStatus(
     val bg       : Color,
     val textColor: Color,
@@ -55,20 +52,23 @@ fun DetailAnakRingkasanScreen(
     val context = LocalContext.current
     val repo    = remember { DetailAnakRepository(context) }
 
-    var namaAnak     by remember { mutableStateOf("") }
+    var namaAnak      by remember { mutableStateOf("") }
     var dataRingkasan by remember { mutableStateOf<DataRingkasanAnak?>(null) }
     var statusVaksin  by remember { mutableStateOf(Pair(0, 0)) }
     var hasilAnalisis by remember { mutableStateOf<HasilAnalisis?>(null) }
+    var alamatPosyandu by remember { mutableStateOf("") }
 
     LaunchedEffect(anakId) {
-        // Ambil nama anak untuk ditampilkan di header
         val db = DatabaseHelper(context).readableDatabase
+
         val cursor = db.rawQuery(
-            "SELECT ${DatabaseHelper.COL_ANAK_NAMA} FROM ${DatabaseHelper.TABLE_ANAK} " +
-                    "WHERE ${DatabaseHelper.COL_ANAK_ID} = ?",
+            "SELECT ${DatabaseHelper.COL_ANAK_NAMA}, ${DatabaseHelper.COL_ANAK_TGL_LAHIR}, ${DatabaseHelper.COL_ANAK_JENIS_KELAMIN} " +
+                    "FROM ${DatabaseHelper.TABLE_ANAK} WHERE ${DatabaseHelper.COL_ANAK_ID} = ?",
             arrayOf(anakId)
         )
-        if (cursor.moveToFirst()) namaAnak = cursor.getString(0) ?: ""
+        if (cursor.moveToFirst()) {
+            namaAnak = cursor.getString(0) ?: ""
+        }
         cursor.close()
         db.close()
 
@@ -87,18 +87,19 @@ fun DetailAnakRingkasanScreen(
                 )
             }
         }
+
+        val vaksinRepo = VaksinRiwayatRepository(context)
+        alamatPosyandu = vaksinRepo.getAlamatPosyandu()
     }
 
     val data = dataRingkasan
 
-    // Label usia & gender
     val usiaGenderLabel = data?.let {
         val genderLabel = if (it.jenisKelamin.uppercase().let { g -> g == "L" || g == "LAKI-LAKI" })
             "Laki-laki" else "Perempuan"
         "${it.umurBulan} Bulan - $genderLabel"
     } ?: ""
 
-    // Vaksin label
     val (vaksinSudah, vaksinTotal) = statusVaksin
     val vaksinPersen = if (vaksinTotal > 0) (vaksinSudah * 100 / vaksinTotal) else 0
     val vaksinLabel  = if (vaksinTotal > 0) "$vaksinPersen%" else "Belum ada data"
@@ -109,13 +110,6 @@ fun DetailAnakRingkasanScreen(
     }
 
     var selectedTab by remember { mutableStateOf("Ringkasan") }
-
-    LaunchedEffect(selectedTab) {
-        when (selectedTab) {
-            "Pemeriksaan" -> { onNavigateToPemeriksaan(); selectedTab = "Ringkasan" }
-            "Vaksin"      -> { onNavigateToVaksin();      selectedTab = "Ringkasan" }
-        }
-    }
 
     Column(
         modifier = Modifier
@@ -131,7 +125,14 @@ fun DetailAnakRingkasanScreen(
 
         RingkasanTabs(
             selectedTab   = selectedTab,
-            onTabSelected = { selectedTab = it }
+            onTabSelected = { tab ->
+                selectedTab = tab
+                when (tab) {
+                    "Pemeriksaan" -> onNavigateToPemeriksaan()
+                    "Vaksin"      -> onNavigateToVaksin()
+                    else          -> {}
+                }
+            }
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -156,17 +157,14 @@ fun DetailAnakRingkasanScreen(
                 vaksinLabel  = vaksinLabel,
                 vaksinDesc   = vaksinDesc,
                 namaAnak     = namaAnak,
-                hasilAnalisis = hasilAnalisis
+                hasilAnalisis = hasilAnalisis,
+                alamatPosyandu = alamatPosyandu
             )
         }
 
-        Spacer(modifier = Modifier.height(40.dp))
+        Spacer(modifier = Modifier.height(80.dp))
     }
 }
-
-// ════════════════════════════════════════════════════════════
-//  HEADER
-// ════════════════════════════════════════════════════════════
 
 @Composable
 private fun HeaderParentProfile(
@@ -224,10 +222,6 @@ private fun HeaderParentProfile(
     }
 }
 
-// ════════════════════════════════════════════════════════════
-//  TABS
-// ════════════════════════════════════════════════════════════
-
 @Composable
 private fun RingkasanTabs(
     selectedTab  : String,
@@ -264,10 +258,6 @@ private fun RingkasanTabs(
     Divider(color = SurfaceDarkBorder, thickness = 1.dp)
 }
 
-// ════════════════════════════════════════════════════════════
-//  RINGKASAN CONTENT
-// ════════════════════════════════════════════════════════════
-
 @Composable
 private fun RingkasanContent(
     bb           : String,
@@ -275,10 +265,9 @@ private fun RingkasanContent(
     vaksinLabel  : String,
     vaksinDesc   : String,
     namaAnak     : String,
-    hasilAnalisis: HasilAnalisis?
+    hasilAnalisis: HasilAnalisis?,
+    alamatPosyandu: String
 ) {
-    // ── Tentukan GrowthStatus dari hasil analisis WHO ─────────
-    // Prioritas: status TB/U (stunting) lebih diutamakan ditampilkan
     val growthStatus: GrowthStatus = when {
         hasilAnalisis == null -> GrowthStatus(
             bg        = SurfaceDark,
@@ -322,7 +311,6 @@ private fun RingkasanContent(
         modifier            = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // BB & TB
         Row(
             modifier              = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -339,10 +327,8 @@ private fun RingkasanContent(
             )
         }
 
-        // Status Vaksin
         VaccineStatusCard(value = vaksinLabel, label = "Vaksin lengkap")
 
-        // Status pertumbuhan (dari WHO)
         InfoCard(
             title     = growthStatus.title,
             detail    = growthStatus.message,
@@ -350,15 +336,17 @@ private fun RingkasanContent(
             textColor = growthStatus.textColor
         )
 
-        // Info jadwal posyandu
         InfoCard(
             title     = "Posyandu berikutnya",
-            detail    = "Hadir ke posyandu setiap bulan untuk pemeriksaan rutin. Bawa buku KIA dan kartu imunisasi.",
+            detail    = if (alamatPosyandu.isNotBlank()) {
+                "Hadir ke posyandu setiap bulan untuk pemeriksaan rutin. Bawa buku KIA dan kartu imunisasi.\n\nLokasi: $alamatPosyandu"
+            } else {
+                "Hadir ke posyandu setiap bulan untuk pemeriksaan rutin. Bawa buku KIA dan kartu imunisasi."
+            },
             bgColor   = DetailInfoScheduleBlue,
             textColor = DetailTextScheduleBlue
         )
 
-        // Info vaksin
         InfoCard(
             title     = "Vaksin",
             detail    = vaksinDesc,
@@ -367,10 +355,6 @@ private fun RingkasanContent(
         )
     }
 }
-
-// ════════════════════════════════════════════════════════════
-//  HELPER COMPOSABLES
-// ════════════════════════════════════════════════════════════
 
 @Composable
 private fun MetricCard(value: String, label: String, modifier: Modifier = Modifier) {

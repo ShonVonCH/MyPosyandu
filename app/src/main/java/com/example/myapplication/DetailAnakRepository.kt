@@ -23,10 +23,30 @@ data class RiwayatPemeriksaanItem(
     val hasil    : HasilAnalisis?
 )
 
-class DetailAnakRepository(context: Context) {
+class DetailAnakRepository(private val context: Context) {
 
     private val db        = DatabaseHelper(context).readableDatabase
-    private val formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy")
+
+    // Support both formats: yyyy-MM-dd (ISO, from API sync) and dd/MM/yyyy (legacy)
+    private fun parseTanggal(tgl: String): LocalDate {
+        return try {
+            when {
+                tgl.contains("-") && tgl.substring(0, 4).toIntOrNull() != null -> {
+                    // Format yyyy-MM-dd (ISO 8601, from API sync)
+                    LocalDate.parse(tgl, DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+                }
+                tgl.contains("/") -> {
+                    // Format dd/MM/yyyy (legacy local format)
+                    val parts = tgl.split("/")
+                    LocalDate.of(parts[2].toInt(), parts[1].toInt(), parts[0].toInt())
+                }
+                else -> LocalDate.now()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("DetailAnakRepo", "Gagal parse tanggal: '$tgl'", e)
+            LocalDate.now()
+        }
+    }
 
     fun getDataRingkasan(anakId: String): DataRingkasanAnak? {
         // Ambil pemeriksaan terakhir
@@ -150,40 +170,57 @@ class DetailAnakRepository(context: Context) {
         return list
     }
 
+    // ── FIX: getStatusVaksin pakai vaksin_riwayat & vaksin_referensi ──
     fun getStatusVaksin(anakId: String): Pair<Int, Int> {
-        // TABLE_IMUNISASI masih pakai nama_anak — sesuaikan jika sudah migrasi
-        val cursor = db.rawQuery(
+        val repo = VaksinRiwayatRepository(context)
+
+        // Hitung umur anak untuk tahu berapa vaksin yang seharusnya sudah diberikan
+        val cursorAnak = db.rawQuery(
             """
-            SELECT COUNT(*),
-                   SUM(CASE WHEN ${DatabaseHelper.COL_IMN_STATUS} = 1 THEN 1 ELSE 0 END)
-            FROM   ${DatabaseHelper.TABLE_IMUNISASI}
-            WHERE  ${DatabaseHelper.COL_IMN_NIK_ANAK} = ?
+            SELECT ${DatabaseHelper.COL_ANAK_TGL_LAHIR}
+            FROM   ${DatabaseHelper.TABLE_ANAK}
+            WHERE  ${DatabaseHelper.COL_ANAK_ID} = ?
+            LIMIT 1
             """.trimIndent(),
             arrayOf(anakId)
         )
-        var total = 0; var sudah = 0
-        if (cursor.moveToFirst()) {
-            total = cursor.getInt(0)
-            sudah = cursor.getInt(1)
+        var umurBulan = 0
+        if (cursorAnak.moveToFirst()) {
+            umurBulan = hitungUmurBulanDariString(cursorAnak.getString(0) ?: "")
         }
-        cursor.close()
+        cursorAnak.close()
+
+        // Total vaksin yang seharusnya sudah diberikan (usia_bulan <= umur anak)
+        val semuaVaksin = repo.getVaksinSudahWaktunya(umurBulan)
+        val total = semuaVaksin.size
+
+        // Vaksin yang sudah diberikan ke anak ini
+        val sudahDiberikan = repo.getVaksinSudahDiberikan(anakId)
+        val sudah = semuaVaksin.count { sudahDiberikan.contains(it.id) }
+
         return Pair(sudah, total)
     }
 
     // ── Helpers tanggal ──────────────────────────────────────
     private fun hitungUmurBulanDariString(tglLahirStr: String): Int {
         return try {
-            val lahir = LocalDate.parse(tglLahirStr, formatter)
+            val lahir = parseTanggal(tglLahirStr)
             val now   = LocalDate.now()
             ((now.year - lahir.year) * 12 + (now.monthValue - lahir.monthValue)).coerceAtLeast(0)
-        } catch (e: Exception) { 0 }
+        } catch (e: Exception) {
+            android.util.Log.e("DetailAnakRepo", "Gagal hitung umur: '$tglLahirStr'", e)
+            0
+        }
     }
 
     private fun hitungUmurBulanAntaraTanggal(tglLahirStr: String, tglPmrkStr: String): Int {
         return try {
-            val lahir = LocalDate.parse(tglLahirStr, formatter)
-            val pmrk  = LocalDate.parse(tglPmrkStr,  formatter)
+            val lahir = parseTanggal(tglLahirStr)
+            val pmrk  = parseTanggal(tglPmrkStr)
             ((pmrk.year - lahir.year) * 12 + (pmrk.monthValue - lahir.monthValue)).coerceAtLeast(0)
-        } catch (e: Exception) { 0 }
+        } catch (e: Exception) {
+            android.util.Log.e("DetailAnakRepo", "Gagal hitung umur: '$tglLahirStr' vs '$tglPmrkStr'", e)
+            0
+        }
     }
 }

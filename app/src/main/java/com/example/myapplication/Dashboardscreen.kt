@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Card
 import androidx.compose.material.LinearProgressIndicator
+import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,12 +29,15 @@ fun DashboardScreen(
     totalAnak           : Int   = 0,
     anakHadir           : Int   = 0,
     anakHadirBulan      : Int   = 0,
+    jadwalBulanIni      : Int   = 0,
     onNavigateToDataAnak: () -> Unit = {},
-    onNavigateToLaporan : () -> Unit = {}
+    onNavigateToLaporan : () -> Unit = {},
+    onNavigateToPanggil : () -> Unit = {},
+    onNavigateToUser    : () -> Unit = {}
 ) {
     val context = LocalContext.current
 
-    var kaderInfo       by remember { mutableStateOf<KaderInfo?>(null) }
+    var kaderInfo        by remember { mutableStateOf<KaderInfo?>(null) }
     var jadwalBerikutnya by remember { mutableStateOf<JadwalBerikutnya?>(null) }
 
     LaunchedEffect(Unit) {
@@ -42,16 +46,26 @@ fun DashboardScreen(
         jadwalBerikutnya = repo.getJadwalBerikutnya()
     }
 
-    val persenHadir = if (totalAnak > 0) anakHadirBulan.toFloat() / totalAnak else 0f
-    val persenLabel = if (totalAnak > 0) "${(persenHadir * 100).toInt()}%" else "0%"
+    val targetHadir = if (jadwalBulanIni > 0) jadwalBulanIni * totalAnak else totalAnak
+    val persenHadir = if (targetHadir > 0) anakHadirBulan.toFloat() / targetHadir else 0f
+    val persenLabel = if (targetHadir > 0) "${(persenHadir * 100).toInt()}%" else "0%"
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(BackgroundDark)
-    ) {
+    Scaffold(
+        backgroundColor = BackgroundDark,
+        bottomBar = {
+            DashboardBottomBar(
+                onHomeClick    = { /* already on home */ },
+                onPanggilClick = onNavigateToPanggil,
+                onLaporanClick = onNavigateToLaporan,
+                onUserClick    = onNavigateToUser,
+                currentTab     = "home"
+            )
+        }
+    ) { innerPadding ->
         LazyColumn(
-            modifier       = Modifier.fillMaxSize(),
+            modifier       = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {
             item {
@@ -77,6 +91,10 @@ fun DashboardScreen(
                 ProgressCard(
                     attendancePercent = persenHadir,
                     percentLabel      = persenLabel,
+                    anakHadirBulan    = anakHadirBulan,
+                    targetHadir       = targetHadir,
+                    jadwalBulanIni    = jadwalBulanIni,
+                    totalAnak         = totalAnak,
                     modifier          = Modifier.padding(horizontal = 16.dp)
                 )
             }
@@ -97,6 +115,84 @@ fun DashboardScreen(
 }
 
 // ════════════════════════════════════════════════════════════
+//  BOTTOM NAVIGATION BAR
+// ════════════════════════════════════════════════════════════
+
+@Composable
+fun DashboardBottomBar(
+    onHomeClick   : () -> Unit = {},
+    onPanggilClick: () -> Unit = {},
+    onLaporanClick: () -> Unit = {},
+    onUserClick   : () -> Unit = {},
+    currentTab    : String     = "home"
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF1C1C1E))
+            .border(
+                width = 1.dp,
+                color = Color(0xFF3A3A3C),
+                shape = RoundedCornerShape(0.dp)
+            )
+            .navigationBarsPadding()
+    ) {
+        Row(
+            modifier              = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment     = Alignment.CenterVertically
+        ) {
+            DashBottomItem(
+                emoji      = "🏠",
+                label      = "Homepage",
+                isSelected = currentTab == "home",
+                onClick    = onHomeClick
+            )
+            DashBottomItem(
+                emoji      = "📣",
+                label      = "Panggil",
+                isSelected = currentTab == "panggil",
+                onClick    = onPanggilClick
+            )
+            DashBottomItem(
+                emoji      = "👤",
+                label      = "User",
+                isSelected = currentTab == "user",
+                onClick    = onUserClick
+            )
+        }
+    }
+}
+
+@Composable
+private fun DashBottomItem(
+    emoji     : String,
+    label     : String,
+    isSelected: Boolean,
+    onClick   : () -> Unit
+) {
+    val labelColor = if (isSelected) Color(0xFF4CAF50) else Color(0xFF9E9E9E)
+
+    Column(
+        modifier            = Modifier
+            .clickable(onClick = onClick)
+            .padding(horizontal = 24.dp, vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(text = emoji, fontSize = 22.sp)
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text       = label,
+            color      = labelColor,
+            fontSize   = 10.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+        )
+    }
+}
+
+// ════════════════════════════════════════════════════════════
 //  1. HEADER SECTION
 // ════════════════════════════════════════════════════════════
 
@@ -105,13 +201,12 @@ fun HeaderSection(kaderInfo: KaderInfo? = null) {
     val nama         = kaderInfo?.nama         ?: "-"
     val posyanduNama = kaderInfo?.posyanduNama  ?: "-"
     val kelurahan    = kaderInfo?.kelurahan     ?: ""
-    val rw           = kaderInfo?.rw            ?: ""
+    val alamat       = kaderInfo?.alamat        ?: ""
 
-    // Format: "Posyandu Mawar, Kel. Limbungan Baru, RW-05"
     val alamatLengkap = buildString {
         if (posyanduNama.isNotBlank()) append(posyanduNama)
         if (kelurahan.isNotBlank())    append(", Kel. $kelurahan")
-        if (rw.isNotBlank())           append(", RW-$rw")
+        if (alamat.isNotBlank())       append(", $alamat")
     }
 
     Box(
@@ -162,7 +257,6 @@ fun ScheduleCard(
     jadwal  : JadwalBerikutnya? = null,
     modifier: Modifier          = Modifier
 ) {
-    // Format tanggal dari "yyyy-MM-dd" ke "Senin, 14 Juli 2026"
     val tanggalFormatted = jadwal?.tanggal?.let { raw ->
         try {
             val sdf    = SimpleDateFormat("yyyy-MM-dd", Locale("id", "ID"))
@@ -172,7 +266,6 @@ fun ScheduleCard(
         } catch (e: Exception) { raw }
     }
 
-    // Format jam: hilangkan detik jika ada "08:00:00" → "08:00"
     val jamMulai   = jadwal?.jamMulai?.take(5)   ?: "-"
     val jamSelesai = jadwal?.jamSelesai?.take(5) ?: "-"
 
@@ -290,7 +383,7 @@ fun StatCard(
                 color      = valueColor,
                 fontSize   = 40.sp,
                 fontWeight = FontWeight.Bold,
-                lineHeight  = 44.sp
+                lineHeight = 44.sp
             )
         }
     }
@@ -304,6 +397,10 @@ fun StatCard(
 fun ProgressCard(
     attendancePercent: Float,
     percentLabel     : String,
+    anakHadirBulan   : Int,
+    targetHadir      : Int,
+    jadwalBulanIni   : Int,
+    totalAnak        : Int,
     modifier         : Modifier = Modifier
 ) {
     Box(
@@ -337,6 +434,19 @@ fun ProgressCard(
                     fontWeight = FontWeight.Bold
                 )
             }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = buildString {
+                    append("$anakHadirBulan anak hadir")
+                    if (jadwalBulanIni > 0) {
+                        append(" dari $targetHadir target ($jadwalBulanIni jadwal × $totalAnak anak)")
+                    } else {
+                        append(" dari $targetHadir anak")
+                    }
+                },
+                color    = TextGrey,
+                fontSize = 12.sp
+            )
             Spacer(modifier = Modifier.height(12.dp))
             LinearProgressIndicator(
                 progress        = attendancePercent,

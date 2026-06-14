@@ -8,12 +8,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Divider
 import androidx.compose.material.Icon
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,6 +28,10 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 private val KonfCardBg        = Color(0xFF2A2A2A)
 private val KonfCardBorder    = Color(0xFF444444)
@@ -45,8 +51,13 @@ fun KonfirmasiDataScreen(
     onPerbaikiClicked: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val anak    = viewModel.formAnak
     val ortu    = viewModel.formOrangTua
+
+    // State untuk status sync
+    var syncStatus by remember { mutableStateOf("") }
+    var isSyncing by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -82,31 +93,59 @@ fun KonfirmasiDataScreen(
 
         SimpanButton(
             onClick = {
-                val ortuRepo = OrtuRepository(context)
-                val db       = DatabaseHelper(context).writableDatabase
+                val dbHelper  = DatabaseHelper(context)
+                val db        = dbHelper.writableDatabase
 
-                // 1. Simpan akun ortu HANYA jika belum ada (akun baru)
-                //    Kalau pilih "akun existing", skip — tidak perlu insert lagi
-                if (!ortuRepo.isUsernameExists(ortu.username)) {
-                    ortuRepo.insertOrtu(
-                        nama     = ortu.nama,
-                        username = ortu.username,
-                        password = ortu.password
-                    )
-                }
+                // Format created_at: yyyy-MM-dd HH:mm:ss
+                val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                val createdAt = sdf.format(Date())
 
-                // 2. Ambil ortu_id berdasarkan username
-                val cursorOrtu = db.rawQuery(
+                // 1. Simpan akun ortu ke SQLite lokal HANYA jika belum ada,
+                //    pakai db instance yang SAMA agar tidak ada race condition
+                val cursorCek = db.rawQuery(
                     "SELECT ${DatabaseHelper.COL_ORTU_ID} FROM ${DatabaseHelper.TABLE_ORTU} " +
                             "WHERE ${DatabaseHelper.COL_ORTU_USERNAME} = ? LIMIT 1",
                     arrayOf(ortu.username)
                 )
-                val ortuId = if (cursorOrtu.moveToFirst()) cursorOrtu.getString(0) ?: "" else ""
-                cursorOrtu.close()
+                val existingOrtuId = if (cursorCek.moveToFirst()) cursorCek.getString(0) ?: "" else ""
+                cursorCek.close()
+
+                val ortuId: String
+                if (existingOrtuId.isNotBlank()) {
+                    // Sudah ada, pakai ID yang existing
+                    ortuId = existingOrtuId
+                    android.util.Log.d("KonfirmasiData", "Ortu sudah ada, pakai id=$ortuId")
+                } else {
+                    // Belum ada, generate UUID dan insert langsung via db yang sama
+                    val newOrtuId = java.util.UUID.randomUUID().toString()
+                    val posyanduCursorOrtu = db.rawQuery(
+                        "SELECT ${DatabaseHelper.COL_USERS_POSYANDU_ID} FROM ${DatabaseHelper.TABLE_USERS} LIMIT 1",
+                        null
+                    )
+                    val posyanduIdOrtu = if (posyanduCursorOrtu.moveToFirst()) posyanduCursorOrtu.getString(0) ?: "" else ""
+                    posyanduCursorOrtu.close()
+
+                    val ortuValues = android.content.ContentValues().apply {
+                        put(DatabaseHelper.COL_ORTU_ID,         newOrtuId)
+                        put(DatabaseHelper.COL_ORTU_NAMA,        ortu.nama)
+                        put(DatabaseHelper.COL_ORTU_USERNAME,    ortu.username)
+                        put(DatabaseHelper.COL_ORTU_PASSWORD,    ortu.password)
+                        put(DatabaseHelper.COL_ORTU_ROLE,        "ortu")
+                        put(DatabaseHelper.COL_ORTU_POSYANDU_ID, posyanduIdOrtu)
+                        put(DatabaseHelper.COL_ORTU_CREATED_AT,  createdAt)
+                    }
+                    db.insertWithOnConflict(
+                        DatabaseHelper.TABLE_ORTU, null, ortuValues,
+                        android.database.sqlite.SQLiteDatabase.CONFLICT_IGNORE
+                    )
+                    ortuId = newOrtuId
+                    android.util.Log.d("KonfirmasiData", "Ortu baru diinsert id=$ortuId")
+                }
 
                 // 3. Insert anak ke tabel anak
                 if (ortuId.isNotBlank() && anak.namaLengkap.isNotBlank()) {
-                    val anakId = anak.nik.ifBlank { java.util.UUID.randomUUID().toString() }
+                    // ID anak selalu UUID — NIK disimpan terpisah, bukan sebagai primary key
+                    val anakId = anak.nik
                     val posyanduCursor = db.rawQuery(
                         "SELECT ${DatabaseHelper.COL_USERS_POSYANDU_ID} FROM ${DatabaseHelper.TABLE_USERS} LIMIT 1",
                         null
@@ -121,7 +160,7 @@ fun KonfirmasiDataScreen(
                         put(DatabaseHelper.COL_ANAK_JENIS_KELAMIN, anak.jenisKelamin)
                         put(DatabaseHelper.COL_ANAK_ORTU_ID,       ortuId)
                         put(DatabaseHelper.COL_ANAK_POSYANDU_ID,   posyanduId)
-                        put(DatabaseHelper.COL_ANAK_CREATED_AT,    System.currentTimeMillis().toString())
+                        put(DatabaseHelper.COL_ANAK_CREATED_AT,    createdAt)
                     }
                     db.insertWithOnConflict(
                         DatabaseHelper.TABLE_ANAK,
@@ -136,10 +175,80 @@ fun KonfirmasiDataScreen(
 
                 // 4. Update in-memory state
                 viewModel.simpanAnak()
-                onSimpanClicked()
+
+                // 5. SYNC KE API — Insert ortu dan anak yang belum ada di database API
+                isSyncing = true
+                syncStatus = "Mengsinkronkan ke server..."
+
+                scope.launch {
+                    try {
+                        // Sync ortu dulu
+                        val resultOrtu = syncOrtuToApi(context)
+                        android.util.Log.d("SYNC_ORTU", resultOrtu.message)
+
+                        // Lalu sync anak
+                        val resultAnak = syncAnakToApi(context)
+                        android.util.Log.d("SYNC_ANAK", resultAnak.message)
+
+                        syncStatus = resultOrtu.message + " | " + resultAnak.message
+                    } catch (e: Exception) {
+                        syncStatus = "Sync gagal: ${e.message}"
+                        android.util.Log.e("SYNC", "Error: ${e.message}", e)
+                    } finally {
+                        isSyncing = false
+                        // Navigate setelah sync selesai
+                        onSimpanClicked()
+                    }
+                }
             },
             modifier = Modifier.padding(horizontal = 16.dp)
         )
+
+        // Tampilkan status sync
+        if (isSyncing || syncStatus.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            val isSuccess = !syncStatus.contains("gagal", ignoreCase = true) &&
+                    !syncStatus.contains("Mengsinkronkan")
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(
+                        when {
+                            isSyncing -> Color(0xFF1A3A2A)
+                            isSuccess -> Color(0xFF1A3A2A)
+                            else -> Color(0xFF3A1A1A)
+                        }
+                    )
+                    .padding(12.dp)
+            ) {
+                if (isSyncing) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        CircularProgressIndicator(
+                            color = Color(0xFF6FDDAA),
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Text(
+                            text = syncStatus,
+                            color = Color(0xFF6FDDAA),
+                            fontSize = 12.sp
+                        )
+                    }
+                } else {
+                    Text(
+                        text = syncStatus,
+                        color = if (isSuccess) Color(0xFF6FDDAA) else Color(0xFFDD6F6F),
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp
+                    )
+                }
+            }
+        }
 
         Spacer(modifier = Modifier.height(10.dp))
 
