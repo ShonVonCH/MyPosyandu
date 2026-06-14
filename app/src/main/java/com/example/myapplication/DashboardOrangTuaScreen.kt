@@ -42,11 +42,13 @@ fun DashboardOrangTuaScreen(
     onNavigateToHome      : () -> Unit       = {},
     onNavigateToTicket    : () -> Unit       = {},
     onNavigateToFood      : () -> Unit       = {},
-    onNavigateToProfile   : () -> Unit       = {}
+    onNavigateToProfile   : () -> Unit       = {},
+    onNavigateToLogout    : () -> Unit       = {}
 ) {
     val context = LocalContext.current
 
     var namaOrtu   by remember { mutableStateOf("") }
+    var showLogoutDialog by remember { mutableStateOf(false) }
     var anakList   by remember { mutableStateOf<List<AnakData>>(emptyList()) }
     var jadwalBerikutnya by remember { mutableStateOf<JadwalBerikutnya?>(null) }
     var posyanduInfo by remember { mutableStateOf("") }
@@ -162,6 +164,37 @@ fun DashboardOrangTuaScreen(
         db.close()
     }
 
+    // ── Popup Logout ─────────────────────────────────────────────────────────
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            backgroundColor  = DashSurfaceDark,
+            title = {
+                Text("Logout", color = DashTextWhite, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            },
+            text = {
+                Text("Yakin ingin keluar dari akun?", color = DashTextGrey, fontSize = 14.sp)
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showLogoutDialog = false
+                    // Hapus data tabel users
+                    val db = DatabaseHelper(context).writableDatabase
+                    db.execSQL("DELETE FROM ${DatabaseHelper.TABLE_USERS}")
+                    db.close()
+                    onNavigateToLogout()
+                }) {
+                    Text("Logout", color = Color(0xFFE74C3C), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) {
+                    Text("Batal", color = DashTextGrey)
+                }
+            }
+        )
+    }
+
     Scaffold(
         backgroundColor = DashBackgroundDark,
         bottomBar = {
@@ -169,7 +202,7 @@ fun DashboardOrangTuaScreen(
                 onHomeClick    = onNavigateToHome,
                 onTicketClick  = onNavigateToTicket,
                 onFoodClick    = onNavigateToFood,
-                onProfileClick = onNavigateToProfile
+                onProfileClick = { showLogoutDialog = true }
             )
         }
     ) { paddingValues ->
@@ -218,10 +251,6 @@ fun DashboardOrangTuaScreen(
                 }
             }
 
-            // Tombol Export Database untuk debug
-            Spacer(modifier = Modifier.height(16.dp))
-            ExportDatabaseButton(modifier = Modifier.padding(horizontal = 16.dp))
-
             // Spacer supaya konten tidak ketimpa bottom nav
             Spacer(modifier = Modifier.height(80.dp))
         }
@@ -237,35 +266,35 @@ private fun BottomNavBarOrtu(
     onFoodClick   : () -> Unit,
     onProfileClick: () -> Unit
 ) {
-    Box(
+    data class NavEntry(val icon: ImageVector, val label: String, val isActive: Boolean, val action: () -> Unit)
+    val entries = listOf(
+        NavEntry(Icons.Outlined.Home,              "Home",    true,  onHomeClick),
+        NavEntry(Icons.Outlined.ConfirmationNumber,"Antrian", false, onTicketClick),
+        NavEntry(Icons.Outlined.Restaurant,        "Menu",    false, onFoodClick),
+        NavEntry(Icons.Outlined.PowerSettingsNew,  "Logout",  false, onProfileClick)
+    )
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(DashSurfaceDark)
+            .background(Color(0xFF1C1C1E))
             .navigationBarsPadding()
+            .padding(vertical = 10.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment     = Alignment.CenterVertically
     ) {
-        Row(
-            modifier              = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment     = Alignment.CenterVertically
-        ) {
-            NavIconOrtu(Icons.Outlined.Home,               isActive = true,  onClick = onHomeClick)
-            NavIconOrtu(Icons.Outlined.ConfirmationNumber, isActive = false, onClick = onTicketClick)
-            NavIconOrtu(Icons.Outlined.Restaurant,         isActive = false, onClick = onFoodClick)
-            NavIconOrtu(Icons.Outlined.Person,             isActive = false, onClick = onProfileClick)
+        entries.forEach { entry ->
+            val tint = if (entry.isActive) DashHeaderBlue else DashTextWhite.copy(alpha = 0.45f)
+            Column(
+                modifier = Modifier.clickable(onClick = entry.action).padding(horizontal = 14.dp, vertical = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(entry.icon, contentDescription = entry.label, tint = tint, modifier = Modifier.size(26.dp))
+                Spacer(Modifier.height(2.dp))
+                Text(entry.label, color = tint, fontSize = 10.sp,
+                    fontWeight = if (entry.isActive) FontWeight.Bold else FontWeight.Normal)
+            }
         }
     }
-}
-
-@Composable
-private fun NavIconOrtu(icon: ImageVector, isActive: Boolean, onClick: () -> Unit) {
-    Icon(
-        imageVector        = icon,
-        contentDescription = null,
-        tint               = if (isActive) DashHeaderBlue else DashTextWhite.copy(alpha = 0.5f),
-        modifier           = Modifier.size(32.dp).clickable(onClick = onClick)
-    )
 }
 
 // ── Header ────────────────────────────────────────────────────────────────────
@@ -280,6 +309,7 @@ private fun HeaderDashboardOrtu(
         modifier = Modifier
             .fillMaxWidth()
             .background(DashHeaderBlue)
+            .statusBarsPadding()
             .padding(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 24.dp)
     ) {
         Text(

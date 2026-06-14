@@ -48,6 +48,12 @@ fun DaftarAnakBaruScreen(
     var jenisKelamin by remember { mutableStateOf(viewModel.formAnak.jenisKelamin) }
     var alamat       by remember { mutableStateOf(viewModel.formAnak.alamat) }
 
+    var errorNama by remember { mutableStateOf(false) }
+    var errorNik by remember { mutableStateOf(false) }
+    var errorTgl by remember { mutableStateOf(false) }
+    var errorJenis by remember { mutableStateOf(false) }
+    var errorAlamat by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -65,45 +71,68 @@ fun DaftarAnakBaruScreen(
 
         FormIdentitas(
             namaLengkap     = namaLengkap,
-            onNamaChange    = { namaLengkap = it },
+            onNamaChange    = { namaLengkap = it; errorNama = false },
             nik             = nik,
-            onNikChange     = { nik = it },
+            onNikChange     = { nik = it; errorNik = false },
             tanggalLahir    = tanggalLahir,
-            onTanggalChange = { tanggalLahir = it },
+            onTanggalChange = { tanggalLahir = it; errorTgl = false },
             jenisKelamin    = jenisKelamin,
-            onJenisChange   = { jenisKelamin = it },
+            onJenisChange   = { jenisKelamin = it; errorJenis = false },
             alamat          = alamat,
-            onAlamatChange  = { alamat = it },
+            onAlamatChange  = { alamat = it; errorAlamat = false },
+            errorNama       = errorNama,
+            errorNik        = errorNik,
+            errorTgl        = errorTgl,
+            errorJenis      = errorJenis,
+            errorAlamat     = errorAlamat,
             modifier        = Modifier.padding(horizontal = 16.dp)
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
         if (dariKonfirmasi) {
-            SelesaiDaftarButtons(
+            SelesaiDaftarButton(
                 onClick = {
-                    viewModel.formAnak = FormAnakData(
-                        namaLengkap  = namaLengkap,
-                        nik          = nik,
-                        tanggalLahir = tanggalLahir,
-                        jenisKelamin = jenisKelamin,
-                        alamat       = alamat
-                    )
-                    onNavigateBack()
+                    var hasError = false
+                    if (namaLengkap.isBlank()) { errorNama = true; hasError = true }
+                    if (nik.isBlank()) { errorNik = true; hasError = true }
+                    if (tanggalLahir.isBlank()) { errorTgl = true; hasError = true }
+                    if (jenisKelamin.isBlank()) { errorJenis = true; hasError = true }
+                    if (alamat.isBlank()) { errorAlamat = true; hasError = true }
+
+                    if (!hasError) {
+                        viewModel.formAnak = FormAnakData(
+                            namaLengkap  = namaLengkap,
+                            nik          = nik,
+                            tanggalLahir = tanggalLahir,
+                            jenisKelamin = jenisKelamin,
+                            alamat       = alamat
+                        )
+                        onNavigateBack()
+                    }
                 },
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
         } else {
             HubungkanButton(
                 onClick = {
-                    viewModel.formAnak = FormAnakData(
-                        namaLengkap  = namaLengkap,
-                        nik          = nik,
-                        tanggalLahir = tanggalLahir,
-                        jenisKelamin = jenisKelamin,
-                        alamat       = alamat
-                    )
-                    onNavigateToHubung()
+                    var hasError = false
+                    if (namaLengkap.isBlank()) { errorNama = true; hasError = true }
+                    if (nik.isBlank()) { errorNik = true; hasError = true }
+                    if (tanggalLahir.isBlank()) { errorTgl = true; hasError = true }
+                    if (jenisKelamin.isBlank()) { errorJenis = true; hasError = true }
+                    if (alamat.isBlank()) { errorAlamat = true; hasError = true }
+
+                    if (!hasError) {
+                        viewModel.formAnak = FormAnakData(
+                            namaLengkap  = namaLengkap,
+                            nik          = nik,
+                            tanggalLahir = tanggalLahir,
+                            jenisKelamin = jenisKelamin,
+                            alamat       = alamat
+                        )
+                        onNavigateToHubung()
+                    }
                 },
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
@@ -126,6 +155,7 @@ fun DaftarAnakHeader(
         modifier = Modifier
             .fillMaxWidth()
             .background(HeaderGreen)
+            .statusBarsPadding()
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 24.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -136,19 +166,13 @@ fun DaftarAnakHeader(
                     .clickable(onClick = onNavigateBack)
                     .padding(horizontal = 14.dp, vertical = 8.dp),
                 verticalAlignment     = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.Center
             ) {
                 Icon(
                     imageVector        = Icons.Filled.ArrowBack,
                     contentDescription = "Kembali",
                     tint               = TextWhite,
                     modifier           = Modifier.size(16.dp)
-                )
-                Text(
-                    text       = "Kembali",
-                    color      = TextWhite,
-                    fontSize   = 13.sp,
-                    fontWeight = FontWeight.Normal
                 )
             }
 
@@ -178,6 +202,11 @@ fun FormIdentitas(
     onJenisChange  : (String) -> Unit,
     alamat         : String,
     onAlamatChange : (String) -> Unit,
+    errorNama      : Boolean = false,
+    errorNik       : Boolean = false,
+    errorTgl       : Boolean = false,
+    errorJenis     : Boolean = false,
+    errorAlamat    : Boolean = false,
     modifier       : Modifier = Modifier
 ) {
     val context  = LocalContext.current
@@ -219,7 +248,8 @@ fun FormIdentitas(
                 label         = "Nama Lengkap",
                 value         = namaLengkap,
                 onValueChange = onNamaChange,
-                placeholder   = "Nama Balita"
+                placeholder   = "Nama Balita",
+                isError       = errorNama
             )
 
             FormField(
@@ -227,7 +257,8 @@ fun FormIdentitas(
                 value         = nik,
                 onValueChange = onNikChange,
                 placeholder   = "NIK Balita",
-                keyboardType  = KeyboardType.Number
+                keyboardType  = KeyboardType.Number,
+                isError       = errorNik
             )
 
             Row(
@@ -248,7 +279,7 @@ fun FormIdentitas(
                             .height(56.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .background(FieldBg)
-                            .border(1.dp, FieldBorder, RoundedCornerShape(8.dp))
+                            .border(1.dp, if (errorTgl) Color.Red else FieldBorder, RoundedCornerShape(8.dp))
                             .clickable { datePickerDialog.show() }
                             .padding(horizontal = 12.dp),
                         contentAlignment = Alignment.CenterStart
@@ -271,6 +302,9 @@ fun FormIdentitas(
                             )
                         }
                     }
+                    if (errorTgl) {
+                        Text("Harus diisi", color = Color.Red, fontSize = 11.sp)
+                    }
                 }
 
                 FormField(
@@ -278,6 +312,7 @@ fun FormIdentitas(
                     value         = jenisKelamin,
                     onValueChange = onJenisChange,
                     placeholder   = "L / P",
+                    isError       = errorJenis,
                     modifier      = Modifier.weight(1f)
                 )
             }
@@ -286,7 +321,8 @@ fun FormIdentitas(
                 label         = "Alamat",
                 value         = alamat,
                 onValueChange = onAlamatChange,
-                placeholder   = "Alamat Balita"
+                placeholder   = "Alamat Balita",
+                isError       = errorAlamat
             )
         }
     }
@@ -304,6 +340,7 @@ fun FormField(
     placeholder  : String,
     modifier     : Modifier                  = Modifier,
     keyboardType : KeyboardType              = KeyboardType.Text,
+    isError      : Boolean                   = false,
     trailingIcon : (@Composable () -> Unit)? = null
 ) {
     Column(
@@ -322,6 +359,7 @@ fun FormField(
                 Text(text = placeholder, color = PlaceholderColor, fontSize = 13.sp)
             },
             trailingIcon         = trailingIcon,
+            isError              = isError,
             singleLine           = true,
             visualTransformation = VisualTransformation.None,
             keyboardOptions      = KeyboardOptions(keyboardType = keyboardType),
@@ -335,7 +373,8 @@ fun FormField(
                 textColor            = TextWhite,
                 cursorColor          = AccentGreen,
                 focusedBorderColor   = AccentGreen,
-                unfocusedBorderColor = FieldBorder,
+                unfocusedBorderColor = if (isError) Color.Red else FieldBorder,
+                errorBorderColor     = Color.Red,
                 backgroundColor      = FieldBg,
                 placeholderColor     = PlaceholderColor,
                 trailingIconColor    = LabelColor,
@@ -343,6 +382,9 @@ fun FormField(
                 unfocusedLabelColor  = LabelColor
             )
         )
+        if (isError) {
+            Text("Harus diisi", color = Color.Red, fontSize = 11.sp)
+        }
     }
 }
 

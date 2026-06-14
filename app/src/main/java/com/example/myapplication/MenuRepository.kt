@@ -6,14 +6,16 @@ import android.database.sqlite.SQLiteDatabase
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 
+// ── Model ─────────────────────────────────────────────────────────────────
 data class MenuKategori(
     val id: String,
     val nama: String,
-    val rangeUsia: String? = null
+    val rangeUsia: String
 )
 
 data class MenuSehat(
@@ -27,173 +29,220 @@ data class MenuSehat(
     val kandunganGizi: String
 )
 
+// ── Repository ────────────────────────────────────────────────────────────
 class MenuRepository(private val context: Context) {
 
     private val dbHelper = DatabaseHelper(context)
+    private val TAG = "MENU_REPO"
+
+    // ── Sync dari API ke local DB ─────────────────────────────────────────
+    suspend fun syncMenuData(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            // menu_kategori.php → isi tabel menu_kategori
+            // menu_sehat.php   → isi tabel menu_sehat
+            val kategoriJson = fetchJson("https://myposyandu.gt.tc/api_posyandu/menu_kategori.php")
+            val menuJson     = fetchJson("https://myposyandu.gt.tc/api_posyandu/menu_sehat.php")
+
+            if (kategoriJson == null && menuJson == null) {
+                Log.w(TAG, "Kedua API gagal, skip sync")
+                return@withContext false
+            }
+
+            val db = dbHelper.writableDatabase
+            db.beginTransaction()
+            try {
+                // ── Insert menu_kategori ──────────────────────────────────
+                if (kategoriJson != null) {
+                    val arr = toJsonArray(kategoriJson)
+                    Log.d(TAG, "Sync kategori: ${arr.length()} data")
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.getJSONObject(i)
+                        val cv = ContentValues().apply {
+                            put(DatabaseHelper.COL_MK_ID,         obj.optString("id"))
+                            put(DatabaseHelper.COL_MK_NAMA,       obj.optString("nama"))
+                            put(DatabaseHelper.COL_MK_RANGE_USIA, obj.optString("range_usia"))
+                        }
+                        db.insertWithOnConflict(
+                            DatabaseHelper.TABLE_MENU_KATEGORI, null, cv,
+                            SQLiteDatabase.CONFLICT_REPLACE
+                        )
+                    }
+                }
+
+                // ── Insert menu_sehat ─────────────────────────────────────
+                if (menuJson != null) {
+                    val arr = toJsonArray(menuJson)
+                    Log.d(TAG, "Sync menu_sehat: ${arr.length()} data")
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.getJSONObject(i)
+
+                        // durasi_menit dari API bisa berupa string "20" atau int 20
+                        val durasi = obj.optString("durasi_menit", "0").toIntOrNull() ?: 0
+
+                        // kandungan_gizi bisa berupa JSON array string atau plain string
+                        val giziRaw = try {
+                            obj.optJSONArray("kandungan_gizi")?.let { ja ->
+                                (0 until ja.length()).joinToString(", ") { ja.optString(it) }
+                            } ?: obj.optString("kandungan_gizi", "")
+                        } catch (_: Exception) { obj.optString("kandungan_gizi", "") }
+
+                        val cv = ContentValues().apply {
+                            put(DatabaseHelper.COL_MS_ID,          obj.optString("id"))
+                            put(DatabaseHelper.COL_MS_KATEGORI_ID, obj.optString("kategori_id"))
+                            put(DatabaseHelper.COL_MS_JUDUL,       obj.optString("judul"))
+                            put(DatabaseHelper.COL_MS_RANGE_USIA,  obj.optString("range_usia"))
+                            put(DatabaseHelper.COL_MS_DURASI,      durasi)
+                            put(DatabaseHelper.COL_MS_BAHAN,       obj.optString("bahan"))
+                            put(DatabaseHelper.COL_MS_CARA_MEMBUAT,obj.optString("cara_membuat"))
+                            put(DatabaseHelper.COL_MS_GIZI,        giziRaw)
+                        }
+                        db.insertWithOnConflict(
+                            DatabaseHelper.TABLE_MENU_SEHAT, null, cv,
+                            SQLiteDatabase.CONFLICT_REPLACE
+                        )
+                    }
+                }
+
+                db.setTransactionSuccessful()
+                Log.d(TAG, "Sync berhasil")
+                true
+            } finally {
+                db.endTransaction()
+                db.close()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Sync gagal: ${e.message}", e)
+            false
+        }
+    }
+
+    // ── Baca dari local DB ────────────────────────────────────────────────
 
     suspend fun getKategoriList(): List<MenuKategori> = withContext(Dispatchers.IO) {
         val list = mutableListOf<MenuKategori>()
         val db = dbHelper.readableDatabase
         try {
-            val cursor = db.query(DatabaseHelper.TABLE_MENU_KATEGORI, null, null, null, null, null, null)
-            while (cursor.moveToNext()) {
+            val c = db.query(
+                DatabaseHelper.TABLE_MENU_KATEGORI, null,
+                null, null, null, null, DatabaseHelper.COL_MK_ID + " ASC"
+            )
+            while (c.moveToNext()) {
                 list.add(MenuKategori(
-                    id = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_MK_ID)),
-                    nama = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_MK_NAMA)),
-                    rangeUsia = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_MK_RANGE_USIA))
+                    id        = c.getString(c.getColumnIndexOrThrow(DatabaseHelper.COL_MK_ID)),
+                    nama      = c.getString(c.getColumnIndexOrThrow(DatabaseHelper.COL_MK_NAMA)),
+                    rangeUsia = c.getString(c.getColumnIndexOrThrow(DatabaseHelper.COL_MK_RANGE_USIA)) ?: ""
                 ))
             }
-            cursor.close()
-        } catch (e: Exception) { Log.e("MENU_REPO", "Error getKategoriList: ${e.message}") }
+            c.close()
+        } catch (e: Exception) { Log.e(TAG, "getKategoriList: ${e.message}") }
         finally { db.close() }
         list
     }
 
-    suspend fun getMenuListByAgeGroup(group: String): List<MenuSehat> = withContext(Dispatchers.IO) {
-        val allMenu = getAllMenuFromLocal()
-        allMenu.filter { menu ->
-            val range = menu.rangeUsia.lowercase()
-            when (group) {
-                "6-12 Bulan" -> range.contains("bulan") && !range.contains("0-") && !range.contains("1-")
-                "1-3 Tahun" -> range.contains("tahun") && (range.contains("1") || range.contains("2") || range.contains("3"))
-                "4-5 Tahun" -> range.contains("tahun") && (range.contains("4") || range.contains("5"))
-                "> 5 Tahun" -> range.contains("tahun") && !range.contains("1") && !range.contains("2") && !range.contains("3") && !range.contains("4")
-                else -> true
-            }
-        }
-    }
-
-    private suspend fun getAllMenuFromLocal(): List<MenuSehat> = withContext(Dispatchers.IO) {
+    suspend fun getMenuByKategori(kategoriId: String): List<MenuSehat> = withContext(Dispatchers.IO) {
         val list = mutableListOf<MenuSehat>()
         val db = dbHelper.readableDatabase
         try {
-            val cursor = db.query(DatabaseHelper.TABLE_MENU_SEHAT, null, null, null, null, null, null)
-            while (cursor.moveToNext()) { list.add(cursorToMenuSehat(cursor)) }
-            cursor.close()
-        } catch (e: Exception) { Log.e("MENU_REPO", "Error getAllMenu: ${e.message}") }
+            val c = db.query(
+                DatabaseHelper.TABLE_MENU_SEHAT, null,
+                "${DatabaseHelper.COL_MS_KATEGORI_ID} = ?", arrayOf(kategoriId),
+                null, null, DatabaseHelper.COL_MS_JUDUL + " ASC"
+            )
+            while (c.moveToNext()) { list.add(cursorToMenu(c)) }
+            c.close()
+        } catch (e: Exception) { Log.e(TAG, "getMenuByKategori: ${e.message}") }
+        finally { db.close() }
+        list
+    }
+
+    suspend fun getMenuByRangeUsia(keywords: List<String>): List<MenuSehat> = withContext(Dispatchers.IO) {
+        val list = mutableListOf<MenuSehat>()
+        val db = dbHelper.readableDatabase
+        try {
+            val c = db.query(DatabaseHelper.TABLE_MENU_SEHAT, null, null, null, null, null, DatabaseHelper.COL_MS_JUDUL + " ASC")
+            while (c.moveToNext()) {
+                val menu = cursorToMenu(c)
+                val r = menu.rangeUsia.lowercase()
+                if (keywords.any { kw -> r.contains(kw.lowercase()) }) {
+                    list.add(menu)
+                }
+            }
+            c.close()
+        } catch (e: Exception) { Log.e(TAG, "getMenuByRangeUsia: ${e.message}") }
         finally { db.close() }
         list
     }
 
     suspend fun getMenuDetail(menuId: String): MenuSehat? = withContext(Dispatchers.IO) {
-        val db = dbHelper.readableDatabase
         var menu: MenuSehat? = null
+        val db = dbHelper.readableDatabase
         try {
-            val cursor = db.query(DatabaseHelper.TABLE_MENU_SEHAT, null, "${DatabaseHelper.COL_MS_ID} = ?", arrayOf(menuId), null, null, null)
-            if (cursor.moveToFirst()) { menu = cursorToMenuSehat(cursor) }
-            cursor.close()
-        } finally { db.close() }
+            val c = db.query(
+                DatabaseHelper.TABLE_MENU_SEHAT, null,
+                "${DatabaseHelper.COL_MS_ID} = ?", arrayOf(menuId),
+                null, null, null
+            )
+            if (c.moveToFirst()) menu = cursorToMenu(c)
+            c.close()
+        } catch (e: Exception) { Log.e(TAG, "getMenuDetail: ${e.message}") }
+        finally { db.close() }
         menu
     }
 
-    suspend fun getRecommendedMenu(): List<MenuSehat> = withContext(Dispatchers.IO) {
+    suspend fun getMenuRekomendasi(limit: Int = 5): List<MenuSehat> = withContext(Dispatchers.IO) {
         val list = mutableListOf<MenuSehat>()
         val db = dbHelper.readableDatabase
         try {
-            val cursor = db.query(DatabaseHelper.TABLE_MENU_SEHAT, null, null, null, null, null, "RANDOM()", "10")
-            while (cursor.moveToNext()) { list.add(cursorToMenuSehat(cursor)) }
-            cursor.close()
-        } finally { db.close() }
+            val c = db.query(
+                DatabaseHelper.TABLE_MENU_SEHAT, null,
+                null, null, null, null, "RANDOM()", limit.toString()
+            )
+            while (c.moveToNext()) { list.add(cursorToMenu(c)) }
+            c.close()
+        } catch (e: Exception) { Log.e(TAG, "getMenuRekomendasi: ${e.message}") }
+        finally { db.close() }
         list
     }
 
-    private fun cursorToMenuSehat(cursor: android.database.Cursor): MenuSehat {
-        return MenuSehat(
-            id = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_MS_ID)),
-            kategoriId = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_MS_KATEGORI_ID)),
-            judul = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_MS_JUDUL)),
-            rangeUsia = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_MS_RANGE_USIA)),
-            durasiMenit = cursor.getInt(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_MS_DURASI)),
-            bahan = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_MS_BAHAN)),
-            caraMembuat = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_MS_CARA_MEMBUAT)),
-            kandunganGizi = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_MS_GIZI))
-        )
-    }
+    private fun cursorToMenu(c: android.database.Cursor): MenuSehat = MenuSehat(
+        id           = c.getString(c.getColumnIndexOrThrow(DatabaseHelper.COL_MS_ID)),
+        kategoriId   = c.getString(c.getColumnIndexOrThrow(DatabaseHelper.COL_MS_KATEGORI_ID)) ?: "",
+        judul        = c.getString(c.getColumnIndexOrThrow(DatabaseHelper.COL_MS_JUDUL)),
+        rangeUsia    = c.getString(c.getColumnIndexOrThrow(DatabaseHelper.COL_MS_RANGE_USIA)) ?: "",
+        durasiMenit  = c.getInt(c.getColumnIndexOrThrow(DatabaseHelper.COL_MS_DURASI)),
+        bahan        = c.getString(c.getColumnIndexOrThrow(DatabaseHelper.COL_MS_BAHAN)) ?: "",
+        caraMembuat  = c.getString(c.getColumnIndexOrThrow(DatabaseHelper.COL_MS_CARA_MEMBUAT)) ?: "",
+        kandunganGizi= c.getString(c.getColumnIndexOrThrow(DatabaseHelper.COL_MS_GIZI)) ?: ""
+    )
 
-    suspend fun syncMenuData(): Boolean = withContext(Dispatchers.IO) {
-        try {
-            // URL sesuai info terakhir:
-            // menu_sehat.php -> Kategori
-            // menu_kategori.php -> Resep Detail
-            val kategoriJson = fetchJsonFromApi("https://myposyandu.gt.tc/api_posyandu/menu_sehat.php")
-            val recipeJson = fetchJsonFromApi("https://myposyandu.gt.tc/api_posyandu/menu_kategori.php")
-            if (kategoriJson == null || recipeJson == null) return@withContext false
-
-            val db = dbHelper.writableDatabase
-            db.execSQL("PRAGMA foreign_keys = OFF")
-            db.beginTransaction()
-            try {
-                // --- Insert Kategori (dari menu_sehat.php) ---
-                val katArray = parseJsonToArray(kategoriJson)
-                for (i in 0 until katArray.length()) {
-                    val obj = katArray.getJSONObject(i)
-                    val values = ContentValues().apply {
-                        put(DatabaseHelper.COL_MK_ID, obj.optString("id", ""))
-                        put(DatabaseHelper.COL_MK_NAMA, obj.optString("nama", ""))
-                        put(DatabaseHelper.COL_MK_RANGE_USIA, obj.optString("range_usia", ""))
-                    }
-                    db.insertWithOnConflict(DatabaseHelper.TABLE_MENU_KATEGORI, null, values, SQLiteDatabase.CONFLICT_REPLACE)
-                }
-
-                // --- Insert Menu Sehat (dari menu_kategori.php) ---
-                val recipeArray = parseJsonToArray(recipeJson)
-                for (i in 0 until recipeArray.length()) {
-                    val obj = recipeArray.getJSONObject(i)
-
-                    val durasiStr = obj.optString("durasi_menit", "0")
-                    val durasiInt = durasiStr.toIntOrNull() ?: 0
-
-                    val values = ContentValues().apply {
-                        put(DatabaseHelper.COL_MS_ID, obj.optString("id", ""))
-                        put(DatabaseHelper.COL_MS_KATEGORI_ID, obj.optString("kategori_id", ""))
-                        put(DatabaseHelper.COL_MS_JUDUL, obj.optString("judul", ""))
-                        put(DatabaseHelper.COL_MS_RANGE_USIA, obj.optString("range_usia", ""))
-                        put(DatabaseHelper.COL_MS_DURASI, durasiInt)
-                        put(DatabaseHelper.COL_MS_BAHAN, obj.optString("bahan", ""))
-                        put(DatabaseHelper.COL_MS_CARA_MEMBUAT, obj.optString("cara_membuat", ""))
-                        put(DatabaseHelper.COL_MS_GIZI, obj.optString("kandungan_gizi", ""))
-                    }
-                    db.insertWithOnConflict(DatabaseHelper.TABLE_MENU_SEHAT, null, values, SQLiteDatabase.CONFLICT_REPLACE)
-                }
-                db.setTransactionSuccessful()
-                true
-            } finally {
-                db.endTransaction()
-                db.execSQL("PRAGMA foreign_keys = ON")
-                db.close()
-            }
+    // ── Helper HTTP ───────────────────────────────────────────────────────
+    private fun fetchJson(url: String): String? {
+        return try {
+            val req = Request.Builder()
+                .url(url)
+                .header("User-Agent", "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36")
+                .header("Accept", "application/json")
+                .build()
+            val resp = httpClient.newCall(req).execute()
+            val body = resp.body?.string() ?: return null
+            resp.close()
+            Log.d(TAG, "fetch [$url]: ${body.take(80)}")
+            val t = body.trimStart()
+            if (t.startsWith("[") || t.startsWith("{")) body else null
         } catch (e: Exception) {
-            Log.e("MENU_SYNC", "Sync failed: ${e.message}", e)
-            false
+            Log.e(TAG, "fetchJson error [$url]: ${e.message}")
+            null
         }
     }
 
-    private fun parseJsonToArray(json: String): JSONArray {
-        val trimmed = json.trim()
-        return if (trimmed.startsWith("{")) {
-            val obj = JSONObject(trimmed)
-            if (obj.has("data")) obj.getJSONArray("data") else JSONArray().put(obj)
-        } else JSONArray(trimmed)
-    }
-
-    private suspend fun fetchJsonFromApi(url: String): String? {
-        val userAgent = "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
-        try {
-            val req = Request.Builder().url(url).header("User-Agent", userAgent).build()
-            val res = httpClient.newCall(req).execute()
-            val body = res.body?.string() ?: ""
-            res.close()
-            if (body.trimStart().startsWith("[") || body.trimStart().startsWith("{")) return body
-            val challenge = parseChallenge(body, url)
-            if (challenge != null) {
-                setTestCookie("myposyandu.gt.tc", aesDecrypt(challenge.c, challenge.a, challenge.b))
-                val res2 = httpClient.newCall(Request.Builder().url(if(challenge.redirectUrl.startsWith("http")) challenge.redirectUrl else "https://myposyandu.gt.tc${challenge.redirectUrl}")
-                    .header("User-Agent", userAgent).header("Referer", url).build()).execute()
-                val body2 = res2.body?.string() ?: ""
-                res2.close()
-                return body2
-            }
-        } catch (e: Exception) { Log.e("MENU_SYNC", "API Error: ${e.message}") }
-        return null
+    // Bisa terima array langsung atau {"data":[...]} wrapper
+    private fun toJsonArray(json: String): JSONArray {
+        val t = json.trimStart()
+        return if (t.startsWith("[")) {
+            JSONArray(json)
+        } else {
+            val obj = JSONObject(json)
+            obj.optJSONArray("data") ?: obj.optJSONArray("items") ?: JSONArray()
+        }
     }
 }

@@ -10,7 +10,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.outlined.ConfirmationNumber
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.PowerSettingsNew
+import androidx.compose.material.icons.outlined.Restaurant
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,7 +55,8 @@ fun AntrianOrtuScreen(
     onNavigateToHome: () -> Unit = {},
     onNavigateToTicket: () -> Unit = {},
     onNavigateToFood: () -> Unit = {},
-    onNavigateToProfile: () -> Unit = {}
+    onNavigateToProfile: () -> Unit = {},
+    onNavigateToLogout: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -63,6 +67,36 @@ fun AntrianOrtuScreen(
     var isLoading by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf("") }
+    var showLogoutDialog by remember { mutableStateOf(false) }
+
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            backgroundColor = AntSurfaceDark,
+            title = {
+                Text("Logout", color = AntTextWhite, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            },
+            text = {
+                Text("Yakin ingin keluar dari akun?", color = AntTextGrey, fontSize = 14.sp)
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showLogoutDialog = false
+                    val db = DatabaseHelper(context).writableDatabase
+                    db.execSQL("DELETE FROM ${DatabaseHelper.TABLE_USERS}")
+                    db.close()
+                    onNavigateToLogout()
+                }) {
+                    Text("Logout", color = Color(0xFFE74C3C), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) {
+                    Text("Batal", color = AntTextGrey)
+                }
+            }
+        )
+    }
 
     LaunchedEffect(userId) {
         android.util.Log.d("ANTRIAN_ORTU", "userId received: '$userId'")
@@ -266,9 +300,9 @@ fun AntrianOrtuScreen(
         bottomBar = {
             BottomNavBarAntrian(
                 onHomeClick = onNavigateToHome,
-                onTicketClick = onNavigateToTicket,
+                onTicketClick = {}, // Sudah di halaman ini
                 onFoodClick = onNavigateToFood,
-                onProfileClick = onNavigateToProfile
+                onProfileClick = { showLogoutDialog = true }
             )
         }
     ) { paddingValues ->
@@ -404,31 +438,35 @@ private fun BottomNavBarAntrian(
     onFoodClick: () -> Unit,
     onProfileClick: () -> Unit
 ) {
+    data class NavEntry(val icon: ImageVector, val label: String, val isActive: Boolean, val action: () -> Unit)
+    val entries = listOf(
+        NavEntry(Icons.Outlined.Home,              "Home",    false, onHomeClick),
+        NavEntry(Icons.Outlined.ConfirmationNumber,"Antrian", true,  onTicketClick),
+        NavEntry(Icons.Outlined.Restaurant,        "Menu",    false, onFoodClick),
+        NavEntry(Icons.Outlined.PowerSettingsNew,  "Logout",  false, onProfileClick)
+    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(AntSurfaceDark)
-            .padding(vertical = 12.dp),
+            .background(Color(0xFF1C1C1E))
+            .navigationBarsPadding()
+            .padding(vertical = 10.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        NavIconAntrian(icon = Icons.Outlined.Home, isActive = false, onClick = onHomeClick)
-        NavIconAntrian(icon = Icons.Outlined.ConfirmationNumber, isActive = true, onClick = onTicketClick)
-        NavIconAntrian(icon = Icons.Outlined.Restaurant, isActive = false, onClick = onFoodClick)
-        NavIconAntrian(icon = Icons.Outlined.Person, isActive = false, onClick = onProfileClick)
+        entries.forEach { entry ->
+            val tint = if (entry.isActive) AntHeaderBlue else Color.White.copy(alpha = 0.45f)
+            Column(
+                modifier = Modifier.clickable(onClick = entry.action).padding(horizontal = 14.dp, vertical = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(entry.icon, contentDescription = entry.label, tint = tint, modifier = Modifier.size(26.dp))
+                Spacer(Modifier.height(2.dp))
+                Text(entry.label, color = tint, fontSize = 10.sp,
+                    fontWeight = if (entry.isActive) FontWeight.Bold else FontWeight.Normal)
+            }
+        }
     }
-}
-
-@Composable
-private fun NavIconAntrian(icon: ImageVector, isActive: Boolean, onClick: () -> Unit) {
-    Icon(
-        imageVector = icon,
-        contentDescription = null,
-        tint = if (isActive) AntHeaderBlue else AntTextWhite.copy(alpha = 0.5f),
-        modifier = Modifier
-            .size(32.dp)
-            .clickable(onClick = onClick)
-    )
 }
 
 @Composable

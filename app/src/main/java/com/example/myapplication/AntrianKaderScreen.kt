@@ -10,9 +10,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.AlertDialog
+import androidx.compose.material.TextButton
+import androidx.compose.material.icons.automirrored.outlined.Assignment
+import androidx.compose.material.icons.outlined.ConfirmationNumber
 import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,7 +68,8 @@ fun AntrianKaderScreen(
     onNavigateBack     : () -> Unit = {},
     onNavigateToHome   : () -> Unit = {},
     onNavigateToPanggil: () -> Unit = {},
-    onNavigateToLaporan: () -> Unit = {}
+    onNavigateToLaporan: () -> Unit = {},
+    onNavigateToLogout : () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope   = rememberCoroutineScope()
@@ -75,6 +79,40 @@ fun AntrianKaderScreen(
     var isLoading      by remember { mutableStateOf(false) }
     var posyanduNama   by remember { mutableStateOf("") }
     var jadwalInfo     by remember { mutableStateOf("") }
+    var showLogoutDialog by remember { mutableStateOf(false) }
+
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            backgroundColor  = Color(0xFF2A2A2A),
+            title = {
+                Text("Logout", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            },
+            text = {
+                Text("Yakin ingin keluar dari akun?", color = Color(0xFF888888), fontSize = 14.sp)
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showLogoutDialog = false
+                    try {
+                        val db = DatabaseHelper(context).writableDatabase
+                        db.execSQL("DELETE FROM ${DatabaseHelper.TABLE_USERS}")
+                        db.close()
+                    } catch (e: Exception) {
+                        android.util.Log.e("LOGOUT_ERROR", "Error clearing user table: ${e.message}")
+                    }
+                    onNavigateToLogout()
+                }) {
+                    Text("Logout", color = Color(0xFFE74C3C), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) {
+                    Text("Batal", color = Color(0xFF888888))
+                }
+            }
+        )
+    }
 
     // ── Load data antrian dari API ──────────────────────────────────────
     suspend fun loadData() {
@@ -217,8 +255,8 @@ fun AntrianKaderScreen(
         bottomBar = {
             KaderBottomBar(
                 onHomeClick    = onNavigateToHome,
-                onPanggilClick = onNavigateToPanggil,
-                onLaporanClick = onNavigateToLaporan,
+                onPanggilClick = { /* already here */ },
+                onLogoutClick  = { showLogoutDialog = true },
                 currentTab     = "panggil"
             )
         }
@@ -426,10 +464,10 @@ private fun CardDipanggil(nomor: String) {
 private fun ButtonPanggilBerikutnya(onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
+            .height(64.dp) // ✅ Fixed height
             .clip(RoundedCornerShape(10.dp))
             .background(KaderButtonGreen)
-            .clickable(onClick = onClick)
-            .padding(vertical = 14.dp),
+            .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -447,11 +485,11 @@ private fun ButtonPanggilBerikutnya(onClick: () -> Unit, modifier: Modifier = Mo
 private fun ButtonTidakHadir(onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
+            .height(64.dp) // ✅ Fixed height same as above
             .clip(RoundedCornerShape(10.dp))
             .background(Color.Transparent)
             .border(2.dp, KaderButtonRed, RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick)
-            .padding(vertical = 14.dp),
+            .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -519,80 +557,59 @@ private fun CardMenunggu(
     }
 }
 
-// ─────────────────────────────────────────────────────────────
-//  BOTTOM NAV — bentuk sama seperti ortu (Icon + label)
-//  isi: Homepage, Panggil, Laporan
-// ─────────────────────────────────────────────────────────────
 @Composable
 private fun KaderBottomBar(
     onHomeClick   : () -> Unit,
     onPanggilClick: () -> Unit,
-    onLaporanClick: () -> Unit,
+    onLogoutClick : () -> Unit = {},
     currentTab    : String = "panggil"
 ) {
+    data class NavEntry(val icon: ImageVector, val label: String, val tab: String, val action: () -> Unit)
+    val entries = listOf(
+        NavEntry(Icons.Outlined.Home,               "Home",    "home",    onHomeClick),
+        NavEntry(Icons.Outlined.ConfirmationNumber, "Antrian", "panggil", onPanggilClick),
+        NavEntry(Icons.Outlined.PowerSettingsNew,   "Logout",  "logout",  onLogoutClick)
+    )
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color(0xFF1C1C1E))
-            .border(width = 1.dp, color = Color(0xFF3A3A3C), shape = RoundedCornerShape(0.dp))
             .navigationBarsPadding()
     ) {
         Row(
             modifier              = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp),
+                .padding(vertical = 10.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment     = Alignment.CenterVertically
         ) {
-            KaderBottomItem(
-                icon       = Icons.Outlined.Home,
-                label      = "Homepage",
-                isSelected = currentTab == "home",
-                onClick    = onHomeClick
-            )
-            KaderBottomItem(
-                icon       = Icons.Outlined.Notifications,
-                label      = "Panggil",
-                isSelected = currentTab == "panggil",
-                onClick    = onPanggilClick
-            )
-            KaderBottomItem(
-                icon       = Icons.Outlined.Person,
-                label      = "Laporan",
-                isSelected = currentTab == "laporan",
-                onClick    = onLaporanClick
-            )
-        }
-    }
-}
+            entries.forEach { entry ->
+                val isActive = currentTab == entry.tab
+                val tint = if (isActive) KaderNeonGreen else Color.White.copy(alpha = 0.45f)
 
-@Composable
-private fun KaderBottomItem(
-    icon      : ImageVector,
-    label     : String,
-    isSelected: Boolean,
-    onClick   : () -> Unit
-) {
-    val tint = if (isSelected) KaderNeonGreen else KaderTextGrey
-    Column(
-        modifier            = Modifier
-            .clickable(onClick = onClick)
-            .padding(horizontal = 24.dp, vertical = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Icon(
-            imageVector        = icon,
-            contentDescription = label,
-            tint               = tint,
-            modifier           = Modifier.size(28.dp)
-        )
-        Spacer(Modifier.height(2.dp))
-        Text(
-            text       = label,
-            color      = tint,
-            fontSize   = 10.sp,
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-        )
+                Column(
+                    modifier = Modifier
+                        .clickable(onClick = entry.action)
+                        .padding(horizontal = 14.dp, vertical = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = entry.icon,
+                        contentDescription = entry.label,
+                        tint = tint,
+                        modifier = Modifier.size(26.dp)
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = entry.label,
+                        color = tint,
+                        fontSize = 10.sp,
+                        fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal
+                    )
+                }
+            }
+        }
     }
 }
 

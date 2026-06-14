@@ -144,6 +144,12 @@ fun PemeriksaanScreen(
     var activeTab     by remember { mutableStateOf(0) }
     var hasil         by remember { mutableStateOf<HasilAnalisis?>(null) }
 
+    var errorBB by remember { mutableStateOf(false) }
+    var errorTB by remember { mutableStateOf(false) }
+    var errorLK by remember { mutableStateOf(false) }
+    var errorLL by remember { mutableStateOf(false) }
+    var errorTgl by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -165,62 +171,76 @@ fun PemeriksaanScreen(
             when (activeTab) {
                 0 -> TabInputContent(
                     beratBadan      = beratBadan,
-                    onBeratChange   = { beratBadan = it },
+                    onBeratChange   = { beratBadan = it; errorBB = false },
                     tinggiBadan     = tinggiBadan,
-                    onTinggiChange  = { tinggiBadan = it },
+                    onTinggiChange  = { tinggiBadan = it; errorTB = false },
                     lingkarKepala   = lingkarKepala,
-                    onKepalaChange  = { lingkarKepala = it },
+                    onKepalaChange  = { lingkarKepala = it; errorLK = false },
                     lingkarLengan   = lingkarLengan,
-                    onLenganChange  = { lingkarLengan = it },
+                    onLenganChange  = { lingkarLengan = it; errorLL = false },
                     tanggal         = tanggal,
-                    onTanggalChange = { tanggal = it },
+                    onTanggalChange = { tanggal = it; errorTgl = false },
+                    errorBB         = errorBB,
+                    errorTB         = errorTB,
+                    errorLK         = errorLK,
+                    errorLL         = errorLL,
+                    errorTgl        = errorTgl,
                     onAnalisisClick = {
-                        val tb = tinggiBadan.toDoubleOrNull()
-                        val bb = beratBadan.toDoubleOrNull()
-                        if (tb != null && bb != null) {
-                            val analisis = analisisWHO(tb, bb, umurBulan, jenisKelamin)
-                            hasil        = analisis
-                            activeTab    = 1
-                            onSimpan(beratBadan, tinggiBadan, analisis)
+                        var hasError = false
+                        if (beratBadan.isBlank()) { errorBB = true; hasError = true }
+                        if (tinggiBadan.isBlank()) { errorTB = true; hasError = true }
+                        if (lingkarKepala.isBlank()) { errorLK = true; hasError = true }
+                        if (lingkarLengan.isBlank()) { errorLL = true; hasError = true }
+                        if (tanggal.isBlank()) { errorTgl = true; hasError = true }
 
-                            // ── Simpan ke tabel pemeriksaan ──────────────────
-                            val repo = PemeriksaanRepository(context)
-                            val kaderIdFinal = kaderIdEffect.value
+                        if (!hasError) {
+                            val tb = tinggiBadan.toDoubleOrNull()
+                            val bb = beratBadan.toDoubleOrNull()
+                            if (tb != null && bb != null) {
+                                val analisis = analisisWHO(tb, bb, umurBulan, jenisKelamin)
+                                hasil        = analisis
+                                activeTab    = 1
+                                onSimpan(beratBadan, tinggiBadan, analisis)
 
-                            Log.d("PEMERIKSAAN_DEBUG", "Insert dengan kaderId=$kaderIdFinal, anakId=$anakId, tgl=$tanggal")
+                                // ── Simpan ke tabel pemeriksaan ──────────────────
+                                val repo = PemeriksaanRepository(context)
+                                val kaderIdFinal = kaderIdEffect.value
 
-                            // Map statusBBU ke nilai yang diterima DB CHECK constraint
-                            val statusGiziDb = when (analisis.statusBBU.lowercase().trim()) {
-                                "gizi buruk"                    -> "gizi_buruk"
-                                "gizi kurang"                   -> "gizi_kurang"
-                                "gizi lebih"                    -> "gizi_lebih"
-                                "obesitas"                      -> "obesitas"
-                                else                            -> "normal"
-                            }
+                                Log.d("PEMERIKSAAN_DEBUG", "Insert dengan kaderId=$kaderIdFinal, anakId=$anakId, tgl=$tanggal")
 
-                            val result = repo.insertPemeriksaan(
-                                id         = java.util.UUID.randomUUID().toString(),
-                                anakId     = anakId,
-                                kaderId    = kaderIdFinal,
-                                tgl        = tanggal,
-                                bb         = beratBadan.toDoubleOrNull() ?: 0.0,
-                                tb         = tinggiBadan.toDoubleOrNull() ?: 0.0,
-                                lk         = lingkarKepala.toDoubleOrNull() ?: 0.0,
-                                ll         = lingkarLengan.toDoubleOrNull() ?: 0.0,
-                                zScoreTbu  = analisis.zScoreTBU,
-                                zScoreBbu  = analisis.zScoreBBU,
-                                statusGizi = statusGiziDb,
-                                catatan    = ""
-                            )
-                            Log.d("PEMERIKSAAN_DEBUG", "Insert result=$result")
+                                // Map statusBBU ke nilai yang diterima DB CHECK constraint
+                                val statusGiziDb = when (analisis.statusBBU.lowercase().trim()) {
+                                    "gizi buruk"                    -> "gizi_buruk"
+                                    "gizi kurang"                   -> "gizi_kurang"
+                                    "gizi lebih"                    -> "gizi_lebih"
+                                    "obesitas"                      -> "obesitas"
+                                    else                            -> "normal"
+                                }
 
-                            // ── SYNC KE API ──────────────────────────────────
-                            scope.launch {
-                                try {
-                                    val resultSync = syncPemeriksaanToApi(context)
-                                    Log.d("SYNC_PMRK", resultSync.message)
-                                } catch (e: Exception) {
-                                    Log.e("SYNC_PMRK", "Gagal sync: ${e.message}", e)
+                                val result = repo.insertPemeriksaan(
+                                    id         = java.util.UUID.randomUUID().toString(),
+                                    anakId     = anakId,
+                                    kaderId    = kaderIdFinal,
+                                    tgl        = tanggal,
+                                    bb         = beratBadan.toDoubleOrNull() ?: 0.0,
+                                    tb         = tinggiBadan.toDoubleOrNull() ?: 0.0,
+                                    lk         = lingkarKepala.toDoubleOrNull() ?: 0.0,
+                                    ll         = lingkarLengan.toDoubleOrNull() ?: 0.0,
+                                    zScoreTbu  = analisis.zScoreTBU,
+                                    zScoreBbu  = analisis.zScoreBBU,
+                                    statusGizi = statusGiziDb,
+                                    catatan    = ""
+                                )
+                                Log.d("PEMERIKSAAN_DEBUG", "Insert result=$result")
+
+                                // ── SYNC KE API ──────────────────────────────────
+                                scope.launch {
+                                    try {
+                                        val resultSync = syncPemeriksaanToApi(context)
+                                        Log.d("SYNC_PMRK", resultSync.message)
+                                    } catch (e: Exception) {
+                                        Log.e("SYNC_PMRK", "Gagal sync: ${e.message}", e)
+                                    }
                                 }
                             }
                         }
@@ -264,6 +284,11 @@ private fun TabInputContent(
     onLenganChange  : (String) -> Unit,
     tanggal         : String,
     onTanggalChange : (String) -> Unit,
+    errorBB         : Boolean = false,
+    errorTB         : Boolean = false,
+    errorLK         : Boolean = false,
+    errorLL         : Boolean = false,
+    errorTgl        : Boolean = false,
     onAnalisisClick : () -> Unit
 ) {
     Column(
@@ -282,12 +307,17 @@ private fun TabInputContent(
             onKepalaChange = onKepalaChange,
             lingkarLengan  = lingkarLengan,
             onLenganChange = onLenganChange,
+            errorBB        = errorBB,
+            errorTB        = errorTB,
+            errorLK        = errorLK,
+            errorLL        = errorLL,
             modifier       = Modifier.padding(horizontal = 16.dp)
         )
         Spacer(modifier = Modifier.height(16.dp))
         TanggalCard(
             tanggal         = tanggal,
             onTanggalChange = onTanggalChange,
+            isError         = errorTgl,
             modifier        = Modifier.padding(horizontal = 16.dp)
         )
         Spacer(modifier = Modifier.height(16.dp))
@@ -955,6 +985,7 @@ fun HeaderProfilAnak(
         modifier = Modifier
             .fillMaxWidth()
             .background(HeaderGreen)
+            .statusBarsPadding()
             .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 20.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -965,10 +996,9 @@ fun HeaderProfilAnak(
                     .clickable(onClick = onNavigateBack)
                     .padding(horizontal = 14.dp, vertical = 8.dp),
                 verticalAlignment     = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.Center
             ) {
                 Icon(Icons.Filled.ArrowBack, "Kembali", tint = TextWhite, modifier = Modifier.size(16.dp))
-                Text(text = "Kembali", color = TextWhite, fontSize = 13.sp)
             }
             Text(text = halamanJudul, color = TextWhite, fontSize = 22.sp, fontWeight = FontWeight.Bold)
             Text(text = subTitle, color = TextWhite.copy(alpha = 0.75f), fontSize = 12.sp)
@@ -1025,18 +1055,22 @@ fun AntropometriCard(
     onKepalaChange : (String) -> Unit,
     lingkarLengan  : String,
     onLenganChange : (String) -> Unit,
+    errorBB        : Boolean = false,
+    errorTB        : Boolean = false,
+    errorLK        : Boolean = false,
+    errorLL        : Boolean = false,
     modifier       : Modifier = Modifier
 ) {
     PemeriksaanCardContainer(modifier = modifier) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(text = "Data Antropometri", color = TextWhite, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                AntropometriField("Berat badan (kg)",    beratBadan,    onBeratChange,  Modifier.weight(1f))
-                AntropometriField("Tinggi badan (cm)",   tinggiBadan,   onTinggiChange, Modifier.weight(1f))
+                AntropometriField("Berat badan (kg)",    beratBadan,    onBeratChange,  errorBB, Modifier.weight(1f))
+                AntropometriField("Tinggi badan (cm)",   tinggiBadan,   onTinggiChange, errorTB, Modifier.weight(1f))
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                AntropometriField("Lingkar Kepala (cm)", lingkarKepala, onKepalaChange, Modifier.weight(1f))
-                AntropometriField("Lingkar lengan (cm)", lingkarLengan, onLenganChange, Modifier.weight(1f))
+                AntropometriField("Lingkar Kepala (cm)", lingkarKepala, onKepalaChange, errorLK, Modifier.weight(1f))
+                AntropometriField("Lingkar lengan (cm)", lingkarLengan, onLenganChange, errorLL, Modifier.weight(1f))
             }
         }
     }
@@ -1046,6 +1080,7 @@ fun AntropometriCard(
 fun TanggalCard(
     tanggal         : String,
     onTanggalChange : (String) -> Unit,
+    isError         : Boolean = false,
     modifier        : Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -1085,7 +1120,7 @@ fun TanggalCard(
                     .height(48.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(Color(0xFF3A3A3A))
-                    .border(1.dp, Color(0xFF555555), RoundedCornerShape(8.dp))
+                    .border(1.dp, if (isError) Color.Red else Color(0xFF555555), RoundedCornerShape(8.dp))
                     .clickable { datePickerDialog.show() }
                     .padding(horizontal = 12.dp),
                 contentAlignment = Alignment.CenterStart
@@ -1107,6 +1142,9 @@ fun TanggalCard(
                         modifier           = Modifier.size(18.dp)
                     )
                 }
+            }
+            if (isError) {
+                Text("Harus diisi", color = Color.Red, fontSize = 11.sp)
             }
         }
     }
@@ -1156,6 +1194,7 @@ fun AntropometriField(
     label         : String,
     value         : String,
     onValueChange : (String) -> Unit,
+    isError       : Boolean = false,
     modifier      : Modifier = Modifier
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -1165,8 +1204,12 @@ fun AntropometriField(
             onValueChange = onValueChange,
             placeholder   = "0.0",
             keyboardType  = KeyboardType.Decimal,
+            isError       = isError,
             modifier      = Modifier.fillMaxWidth().height(48.dp)
         )
+        if (isError) {
+            Text("Harus diisi", color = Color.Red, fontSize = 11.sp)
+        }
     }
 }
 
@@ -1176,7 +1219,8 @@ fun PemeriksaanInputBox(
     onValueChange : (String) -> Unit,
     placeholder   : String,
     modifier      : Modifier = Modifier,
-    keyboardType  : KeyboardType = KeyboardType.Text
+    keyboardType  : KeyboardType = KeyboardType.Text,
+    isError       : Boolean = false
 ) {
     BasicTextField(
         value           = value,
@@ -1188,7 +1232,7 @@ fun PemeriksaanInputBox(
         modifier        = modifier
             .clip(RoundedCornerShape(8.dp))
             .background(Color(0xFF3A3A3A))
-            .border(1.dp, Color(0xFF555555), RoundedCornerShape(8.dp))
+            .border(1.dp, if (isError) Color.Red else Color(0xFF555555), RoundedCornerShape(8.dp))
             .padding(horizontal = 12.dp),
         decorationBox = { innerTextField ->
             Box(contentAlignment = Alignment.CenterStart, modifier = Modifier.fillMaxSize()) {

@@ -1,5 +1,6 @@
 package com.example.myapplication
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,9 +14,12 @@ import androidx.compose.material.LinearProgressIndicator
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.AlertDialog
+import androidx.compose.material.TextButton
+import androidx.compose.material.icons.automirrored.outlined.Assignment
+import androidx.compose.material.icons.outlined.ConfirmationNumber
 import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,13 +42,49 @@ fun DashboardScreen(
     jadwalBulanIni      : Int   = 0,
     onNavigateToDataAnak: () -> Unit = {},
     onNavigateToLaporan : () -> Unit = {},
-    onNavigateToPanggil : () -> Unit = {},  // ← TAMBAH INI
-    onNavigateToUser    : () -> Unit = {}
+    onNavigateToPanggil : () -> Unit = {},
+    onNavigateToJadwal  : () -> Unit = {},
+    onNavigateToLogout  : () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     var kaderInfo        by remember { mutableStateOf<KaderInfo?>(null) }
     var jadwalBerikutnya by remember { mutableStateOf<JadwalBerikutnya?>(null) }
+    var showLogoutDialog by remember { mutableStateOf(false) }
+
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            backgroundColor  = Color(0xFF2A2A2A),
+            title = {
+                Text("Logout", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            },
+            text = {
+                Text("Yakin ingin keluar dari akun?", color = Color(0xFF888888), fontSize = 14.sp)
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showLogoutDialog = false
+                    try {
+                        val db = DatabaseHelper(context).writableDatabase
+                        db.execSQL("DELETE FROM ${DatabaseHelper.TABLE_USERS}")
+                        db.close()
+                    } catch (e: Exception) {
+                        Log.e("LOGOUT_ERROR", "Error clearing user table: ${e.message}")
+                    }
+                    onNavigateToLogout()
+                }) {
+                    Text("Logout", color = Color(0xFFE74C3C), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) {
+                    Text("Batal", color = Color(0xFF888888))
+                }
+            }
+        )
+    }
 
     LaunchedEffect(Unit) {
         val repo         = DashboardKaderRepository(context)
@@ -61,9 +101,9 @@ fun DashboardScreen(
         bottomBar = {
             DashboardBottomBar(
                 onHomeClick    = { /* already on home */ },
-                onPanggilClick = onNavigateToPanggil,  // ← Sambungkan ke sini
+                onPanggilClick = onNavigateToPanggil,
                 onLaporanClick = onNavigateToLaporan,
-                onUserClick    = onNavigateToUser,
+                onLogoutClick  = { showLogoutDialog = true },
                 currentTab     = "home"
             )
         }
@@ -81,7 +121,9 @@ fun DashboardScreen(
             item {
                 ScheduleCard(
                     jadwal   = jadwalBerikutnya,
-                    modifier = Modifier.padding(horizontal = 16.dp)
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp)
+                        .clickable { onNavigateToJadwal() }
                 )
             }
             item { Spacer(modifier = Modifier.height(16.dp)) }
@@ -113,9 +155,6 @@ fun DashboardScreen(
                 )
             }
             item { Spacer(modifier = Modifier.height(16.dp)) }
-            item {
-                ExportDatabaseButton(modifier = Modifier.padding(horizontal = 16.dp))
-            }
         }
     }
 }
@@ -129,77 +168,55 @@ fun DashboardBottomBar(
     onHomeClick   : () -> Unit = {},
     onPanggilClick: () -> Unit = {},
     onLaporanClick: () -> Unit = {},
-    onUserClick   : () -> Unit = {},
+    onLogoutClick : () -> Unit = {},
     currentTab    : String     = "home"
 ) {
+    data class NavEntry(val icon: ImageVector, val label: String, val tab: String, val action: () -> Unit)
+    val entries = listOf(
+        NavEntry(Icons.Outlined.Home,               "Home",    "home",    onHomeClick),
+        NavEntry(Icons.Outlined.ConfirmationNumber, "Antrian", "panggil", onPanggilClick),
+        NavEntry(Icons.Outlined.PowerSettingsNew,   "Logout",  "logout",  onLogoutClick)
+    )
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color(0xFF1C1C1E))
-            .border(
-                width = 1.dp,
-                color = Color(0xFF3A3A3C),
-                shape = RoundedCornerShape(0.dp)
-            )
             .navigationBarsPadding()
     ) {
         Row(
             modifier              = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp),
+                .padding(vertical = 10.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment     = Alignment.CenterVertically
         ) {
-            DashBottomItem(
-                icon       = Icons.Outlined.Home,
-                label      = "Homepage",
-                isSelected = currentTab == "home",
-                onClick    = onHomeClick
-            )
-            DashBottomItem(
-                icon       = Icons.Outlined.Notifications,  // ← Icon untuk Panggil
-                label      = "Panggil",
-                isSelected = currentTab == "panggil",
-                onClick    = onPanggilClick
-            )
-            DashBottomItem(
-                icon       = Icons.Outlined.Person,
-                label      = "User",
-                isSelected = currentTab == "user",
-                onClick    = onUserClick
-            )
+            entries.forEach { entry ->
+                val isActive = currentTab == entry.tab
+                val tint = if (isActive) Color(0xFF2E9B6E) else Color.White.copy(alpha = 0.45f)
+
+                Column(
+                    modifier = Modifier
+                        .clickable(onClick = entry.action)
+                        .padding(horizontal = 14.dp, vertical = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = entry.icon,
+                        contentDescription = entry.label,
+                        tint = tint,
+                        modifier = Modifier.size(26.dp)
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = entry.label,
+                        color = tint,
+                        fontSize = 10.sp,
+                        fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal
+                    )
+                }
+            }
         }
-    }
-}
-
-@Composable
-private fun DashBottomItem(
-    icon      : ImageVector,   // ← Ganti dari String (emoji) ke ImageVector
-    label     : String,
-    isSelected: Boolean,
-    onClick   : () -> Unit
-) {
-    val labelColor = if (isSelected) Color(0xFF4CAF50) else Color(0xFF9E9E9E)
-
-    Column(
-        modifier            = Modifier
-            .clickable(onClick = onClick)
-            .padding(horizontal = 24.dp, vertical = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Icon(                      // ← Ganti dari Text(emoji) ke Icon()
-            imageVector = icon,
-            contentDescription = label,
-            tint = labelColor,
-            modifier = Modifier.size(28.dp)
-        )
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(
-            text       = label,
-            color      = labelColor,
-            fontSize   = 10.sp,
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-        )
     }
 }
 
@@ -224,7 +241,8 @@ fun HeaderSection(kaderInfo: KaderInfo? = null) {
         modifier = Modifier
             .fillMaxWidth()
             .background(color = HeaderGreen)
-            .padding(start = 20.dp, end = 20.dp, top = 40.dp, bottom = 24.dp)
+            .statusBarsPadding()
+            .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 24.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Text(
@@ -445,19 +463,6 @@ fun ProgressCard(
                     fontWeight = FontWeight.Bold
                 )
             }
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = buildString {
-                    append("$anakHadirBulan anak hadir")
-                    if (jadwalBulanIni > 0) {
-                        append(" dari $targetHadir target ($jadwalBulanIni jadwal × $totalAnak anak)")
-                    } else {
-                        append(" dari $targetHadir anak")
-                    }
-                },
-                color    = TextGrey,
-                fontSize = 12.sp
-            )
             Spacer(modifier = Modifier.height(12.dp))
             LinearProgressIndicator(
                 progress        = attendancePercent,

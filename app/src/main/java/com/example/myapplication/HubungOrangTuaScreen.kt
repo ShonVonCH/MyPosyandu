@@ -77,11 +77,13 @@ fun HubungOrangTuaScreen(
     var noHp     by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
 
-    val formBaruValid = namaOrtu.isNotBlank() && username.isNotBlank() &&
-            noHp.isNotBlank() && password.isNotBlank()
+    var errorNama by remember { mutableStateOf(false) }
+    var errorUser by remember { mutableStateOf(false) }
+    var errorHp   by remember { mutableStateOf(false) }
+    var errorPass by remember { mutableStateOf(false) }
 
     val showLanjut = if (selectedMethod == "existing") selectedAccount != null
-    else formBaruValid
+    else true // Selalu tampil agar bisa divalidasi saat diklik
 
     Column(
         modifier = Modifier
@@ -135,13 +137,17 @@ fun HubungOrangTuaScreen(
         } else {
             FormAkunBaruCard(
                 namaOrtu      = namaOrtu,
-                onNamaChange  = { namaOrtu = it },
+                onNamaChange  = { namaOrtu = it; errorNama = false },
                 username      = username,
-                onUserChange  = { username = it },
+                onUserChange  = { username = it; errorUser = false },
                 noHp          = noHp,
-                onHpChange    = { noHp = it },
+                onHpChange    = { noHp = it; errorHp = false },
                 password      = password,
-                onPassChange  = { password = it },
+                onPassChange  = { password = it; errorPass = false },
+                errorNama     = errorNama,
+                errorUser     = errorUser,
+                errorHp       = errorHp,
+                errorPass     = errorPass,
                 modifier      = Modifier.padding(horizontal = 16.dp)
             )
         }
@@ -150,12 +156,23 @@ fun HubungOrangTuaScreen(
             Spacer(modifier = Modifier.height(16.dp))
             LanjutButton(
                 onClick = {
-                    if (selectedMethod == "new") {
-                        // Simpan data ortu baru ke ViewModel (belum ke DB — DB diisi saat Simpan & Daftarkan)
-                        viewModel.tambahAkunOrangTua(namaOrtu, username, noHp, password)
+                    if (selectedMethod == "existing") {
+                        if (selectedAccount != null) {
+                            onNavigateNext()
+                        }
+                    } else {
+                        var hasError = false
+                        if (namaOrtu.isBlank()) { errorNama = true; hasError = true }
+                        if (username.isBlank()) { errorUser = true; hasError = true }
+                        if (noHp.isBlank()) { errorHp = true; hasError = true }
+                        if (password.isBlank()) { errorPass = true; hasError = true }
+
+                        if (!hasError) {
+                            // Simpan data ortu baru ke ViewModel (belum ke DB — DB diisi saat Simpan & Daftarkan)
+                            viewModel.tambahAkunOrangTua(namaOrtu, username, noHp, password)
+                            onNavigateNext()
+                        }
                     }
-                    // Untuk method "existing", formOrangTua sudah diset saat onSelectAccount
-                    onNavigateNext()
                 },
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
@@ -173,6 +190,7 @@ fun HubungHeader(onNavigateBack: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .background(HeaderGreen)
+            .statusBarsPadding()
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 24.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -183,11 +201,10 @@ fun HubungHeader(onNavigateBack: () -> Unit) {
                     .clickable(onClick = onNavigateBack)
                     .padding(horizontal = 14.dp, vertical = 8.dp),
                 verticalAlignment     = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.Center
             ) {
                 Icon(Icons.Filled.ArrowBack, contentDescription = "Kembali",
                     tint = TextWhite, modifier = Modifier.size(16.dp))
-                Text(text = "Kembali", color = TextWhite, fontSize = 13.sp)
             }
             Text(
                 text = "Hubungkan Ke Akun Orang Tua",
@@ -424,6 +441,10 @@ fun FormAkunBaruCard(
     username    : String, onUserChange: (String) -> Unit,
     noHp        : String, onHpChange  : (String) -> Unit,
     password    : String, onPassChange: (String) -> Unit,
+    errorNama   : Boolean = false,
+    errorUser   : Boolean = false,
+    errorHp     : Boolean = false,
+    errorPass   : Boolean = false,
     modifier    : Modifier = Modifier
 ) {
     val fieldBg     = Color(0xFF3A3A3A)
@@ -440,10 +461,10 @@ fun FormAkunBaruCard(
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Buat akun orang tua baru", color = TextWhite,
                 fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            HOInputField("Nama Orang Tua",     namaOrtu, onNamaChange, "Nama Orang Tua",         fieldBg, fieldBorder, labelColor)
-            HOInputField("Username Orang Tua", username, onUserChange, "Untuk login orang tua",  fieldBg, fieldBorder, labelColor)
-            HOInputField("No. HP",             noHp,     onHpChange,   "No. Hp Orang Tua",       fieldBg, fieldBorder, labelColor, KeyboardType.Phone)
-            HOInputField("Password Sementara", password, onPassChange, "Min. 6 karakter",        fieldBg, fieldBorder, labelColor, KeyboardType.Password, true)
+            HOInputField("Nama Orang Tua",     namaOrtu, onNamaChange, "Nama Orang Tua",         fieldBg, fieldBorder, labelColor, isError = errorNama)
+            HOInputField("Username Orang Tua", username, onUserChange, "Untuk login orang tua",  fieldBg, fieldBorder, labelColor, isError = errorUser)
+            HOInputField("No. HP",             noHp,     onHpChange,   "No. Hp Orang Tua",       fieldBg, fieldBorder, labelColor, KeyboardType.Phone, isError = errorHp)
+            HOInputField("Password Sementara", password, onPassChange, "Min. 6 karakter",        fieldBg, fieldBorder, labelColor, KeyboardType.Password, true, isError = errorPass)
             Box(
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
                     .background(infoBoxBg).padding(12.dp)
@@ -462,6 +483,7 @@ private fun HOInputField(
     label        : String, value: String, onValueChange: (String) -> Unit,
     placeholder  : String, fieldBg: Color, fieldBorder: Color, labelColor: Color,
     keyboardType : KeyboardType = KeyboardType.Text, isPassword: Boolean = false,
+    isError      : Boolean = false,
     modifier     : Modifier = Modifier
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -471,6 +493,7 @@ private fun HOInputField(
             modifier = Modifier.fillMaxWidth().height(50.dp),
             placeholder = { Text(placeholder, color = Color(0xFF6B6B6B), fontSize = 14.sp) },
             singleLine = true,
+            isError = isError,
             textStyle = TextStyle(color = TextWhite, fontSize = 14.sp),
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
             visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
@@ -479,11 +502,15 @@ private fun HOInputField(
                 textColor            = TextWhite,
                 cursorColor          = AccentGreen,
                 focusedBorderColor   = AccentGreen,
-                unfocusedBorderColor = fieldBorder,
+                unfocusedBorderColor = if (isError) Color.Red else fieldBorder,
                 backgroundColor      = fieldBg,
-                placeholderColor     = Color(0xFF6B6B6B)
+                placeholderColor     = Color(0xFF6B6B6B),
+                errorBorderColor     = Color.Red
             )
         )
+        if (isError) {
+            Text("Harus diisi", color = Color.Red, fontSize = 11.sp)
+        }
     }
 }
 

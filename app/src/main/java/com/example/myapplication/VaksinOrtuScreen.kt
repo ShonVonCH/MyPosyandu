@@ -210,7 +210,7 @@ private fun VaksinOrtuHeader(
                 .clickable(onClick = onBackClicked)
                 .padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment    = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.Center
         ) {
             Icon(
                 Icons.AutoMirrored.Filled.ArrowBack,
@@ -218,7 +218,6 @@ private fun VaksinOrtuHeader(
                 tint     = VakTextWhite,
                 modifier = Modifier.size(18.dp)
             )
-            Text("Semua Anak", color = VakTextWhite, fontSize = 14.sp)
         }
 
         Spacer(modifier = Modifier.height(20.dp))

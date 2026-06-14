@@ -115,10 +115,9 @@ private fun PemHeaderProfile(
                 .clickable(onClick = onBackClicked)
                 .padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment     = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.Center
         ) {
             Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = TextWhite, modifier = Modifier.size(18.dp))
-            Text("Semua Anak", color = TextWhite, fontSize = 14.sp)
         }
 
         Spacer(modifier = Modifier.height(20.dp))

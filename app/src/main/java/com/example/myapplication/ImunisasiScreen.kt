@@ -537,7 +537,8 @@ fun ImunisasiHeader(
         modifier = Modifier
             .fillMaxWidth()
             .background(HeaderGreen)
-            .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 20.dp)
+            .statusBarsPadding()
+            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 20.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(
@@ -547,10 +548,9 @@ fun ImunisasiHeader(
                     .clickable(onClick = onNavigateBack)
                     .padding(horizontal = 14.dp, vertical = 8.dp),
                 verticalAlignment     = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.Center
             ) {
                 Icon(Icons.Filled.ArrowBack, "Kembali", tint = TextWhite, modifier = Modifier.size(16.dp))
-                Text(text = "Kembali", color = TextWhite, fontSize = 13.sp)
             }
             Text(text = "Imunisasi", color = TextWhite, fontSize = 24.sp, fontWeight = FontWeight.Bold)
             Text(text = "$namaAnak ~ $umurBulan Bulan", color = TextWhite.copy(alpha = 0.75f), fontSize = 13.sp)

@@ -169,7 +169,8 @@ fun RiwayatHeader(
         modifier = Modifier
             .fillMaxWidth()
             .background(HeaderGreen)
-            .padding(start = 16.dp, end = 16.dp, top = 40.dp, bottom = 24.dp)
+            .statusBarsPadding()
+            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 24.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(
@@ -179,10 +180,9 @@ fun RiwayatHeader(
                     .clickable(onClick = onNavigateBack)
                     .padding(horizontal = 14.dp, vertical = 8.dp),
                 verticalAlignment     = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.Center
             ) {
                 Icon(Icons.Filled.ArrowBack, "Kembali", tint = TextWhite, modifier = Modifier.size(16.dp))
-                Text(text = "Kembali", color = TextWhite, fontSize = 13.sp)
             }
             Row(
                 verticalAlignment     = Alignment.CenterVertically,

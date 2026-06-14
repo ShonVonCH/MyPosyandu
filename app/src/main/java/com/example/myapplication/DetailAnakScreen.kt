@@ -51,7 +51,6 @@ fun DetailAnakHeader(onBack: () -> Unit) {
             .background(headerColor)
             .padding(top = 48.dp, start = 24.dp, end = 24.dp, bottom = 24.dp)
     ) {
-        // Tombol Kembali (Dengan Border Putih)
         Box(
             modifier = Modifier
                 .border(1.dp, Color.White, RoundedCornerShape(8.dp))
@@ -64,13 +63,6 @@ fun DetailAnakHeader(onBack: () -> Unit) {
                     contentDescription = "Back",
                     tint = Color.White,
                     modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Kembali",
-                    color = Color.White,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
                 )
             }
         }

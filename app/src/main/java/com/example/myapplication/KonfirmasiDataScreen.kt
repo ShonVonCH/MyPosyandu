@@ -267,7 +267,8 @@ fun KonfirmasiHeader(onNavigateBack: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .background(HeaderGreen)
-            .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 28.dp)
+            .statusBarsPadding()
+            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 28.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(
@@ -277,11 +278,10 @@ fun KonfirmasiHeader(onNavigateBack: () -> Unit) {
                     .clickable(onClick = onNavigateBack)
                     .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment     = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.Center
             ) {
                 Icon(Icons.Filled.ArrowBack, "Kembali", tint = TextWhite,
                     modifier = Modifier.size(16.dp))
-                Text("Kembali", color = TextWhite, fontSize = 14.sp)
             }
             Text("Konfirmasi Data", color = TextWhite, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         }

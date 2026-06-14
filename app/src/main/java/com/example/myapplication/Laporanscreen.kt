@@ -1,5 +1,9 @@
 package com.example.myapplication
 
+import android.content.ContentValues
+import android.content.Context
+import android.os.Environment
+import android.provider.MediaStore
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -13,10 +17,6 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.runtime.*
-import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.Person
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,9 +42,6 @@ private val LaporanGreenBright  = Color(0xFF4CAF50)
 private val LaporanRed          = Color(0xFFD32F2F)
 private val LaporanWhite        = Color(0xFFFFFFFF)
 private val LaporanGrey         = Color(0xFF9E9E9E)
-private val LaporanHeaderGreen  = Color(0xFF1B5E20)
-private val LaporanBottomBarBg  = Color(0xFF1C1C1E)
-private val LaporanBottomBorder = Color(0xFF3A3A3C)
 
 private val cakupanOptions = listOf("Semua Balita", "Balita Laki-laki", "Balita Perempuan")
 
@@ -177,10 +174,7 @@ fun MonthYearPickerDialog(
 
 @Composable
 fun LaporanScreen(
-    onNavigateBack     : () -> Unit = {},
-    onNavigateToHome   : () -> Unit = {},
-    onNavigateToPanggil: () -> Unit = {},
-    onNavigateToUser   : () -> Unit = {}
+    onNavigateBack     : () -> Unit = {}
 ) {
     val context        = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -268,16 +262,40 @@ fun LaporanScreen(
         }
     }
 
-    Scaffold(
-        backgroundColor = LaporanBg,
-        bottomBar = {
-            LaporanBottomBar(
-                onHomeClick    = onNavigateToHome,
-                onPanggilClick = onNavigateToPanggil,
-                onUserClick    = onNavigateToUser,
-                currentTab     = "laporan"
-            )
+    // ── Handler Export ─────────────────────────────────────────────────────────
+    fun exportLaporan(format: String) {
+        if (rawDari.after(rawSampai)) {
+            Toast.makeText(context, "Tanggal 'Dari' tidak boleh setelah 'Sampai'.", Toast.LENGTH_SHORT).show()
+            return
         }
+
+        isLoading = true
+        syncStatus = ""
+        coroutineScope.launch {
+            val repo = LaporanRepository(context)
+            val result = withContext(Dispatchers.IO) {
+                repo.exportLaporan(
+                    dariCal   = rawDari,
+                    sampaiCal = rawSampai,
+                    cakupan   = cakupan,
+                    format    = format
+                )
+            }
+            isLoading = false
+
+            syncStatus = result.message
+            isSuccess = result.success
+
+            if (result.success) {
+                Toast.makeText(context, "✅ ${result.message}", Toast.LENGTH_LONG).show()
+            } else {
+                Toast.makeText(context, "❌ ${result.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    Scaffold(
+        backgroundColor = LaporanBg
     ) { innerPadding ->
         Column(
             modifier = Modifier.fillMaxSize().padding(innerPadding)
@@ -286,8 +304,9 @@ fun LaporanScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(LaporanHeaderGreen)
-                    .padding(start = 16.dp, end = 16.dp, top = 40.dp, bottom = 20.dp)
+                    .background(HeaderGreen)
+                    .statusBarsPadding()
+                    .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 20.dp)
             ) {
                 Column {
                     Box(
@@ -299,8 +318,6 @@ fun LaporanScreen(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.ArrowBack, "Kembali", tint = LaporanWhite, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Kembali", color = LaporanWhite, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                         }
                     }
                     Spacer(modifier = Modifier.height(16.dp))
@@ -393,33 +410,44 @@ fun LaporanScreen(
                     }
                 }
 
-                // Kartu Format Ekspor
+                // Kartu Format Ekspor — UPDATED dengan handler
                 item {
                     LaporanCardContainer(title = "Format Ekspor") {
                         Button(
-                            onClick  = { /* TODO: export PDF */ },
+                            onClick  = { exportLaporan("pdf") },
+                            enabled  = !isLoading,
                             modifier = Modifier.fillMaxWidth().height(50.dp),
                             shape    = RoundedCornerShape(10.dp),
                             colors   = ButtonDefaults.buttonColors(backgroundColor = LaporanRed)
                         ) {
-                            Text("Laporan PDF lengkap", color = LaporanWhite, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                            if (isLoading) {
+                                CircularProgressIndicator(color = LaporanWhite, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                Spacer(Modifier.width(8.dp))
+                            }
+                            Text("📄 Laporan PDF lengkap", color = LaporanWhite, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                         }
 
                         Spacer(Modifier.height(12.dp))
 
                         Button(
-                            onClick  = { /* TODO: export Excel */ },
+                            onClick  = { exportLaporan("excel") },
+                            enabled  = !isLoading,
                             modifier = Modifier.fillMaxWidth().height(50.dp),
                             shape    = RoundedCornerShape(10.dp),
                             colors   = ButtonDefaults.buttonColors(backgroundColor = LaporanGreen)
                         ) {
-                            Text("Data Excel (.xlsx)", color = LaporanWhite, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                            if (isLoading) {
+                                CircularProgressIndicator(color = LaporanWhite, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                Spacer(Modifier.width(8.dp))
+                            }
+                            Text("📊 Data Excel (.xlsx)", color = LaporanWhite, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                         }
 
                         Spacer(Modifier.height(12.dp))
 
                         OutlinedButton(
-                            onClick  = { /* TODO: export CSV */ },
+                            onClick  = { exportLaporan("csv") },
+                            enabled  = !isLoading,
                             modifier = Modifier.fillMaxWidth().height(50.dp),
                             shape    = RoundedCornerShape(10.dp),
                             border   = ButtonDefaults.outlinedBorder.copy(width = 1.5.dp),
@@ -428,7 +456,11 @@ fun LaporanScreen(
                                 backgroundColor = Color.Transparent
                             )
                         ) {
-                            Text("Data CSV", color = LaporanWhite, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                            if (isLoading) {
+                                CircularProgressIndicator(color = LaporanWhite, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                Spacer(Modifier.width(8.dp))
+                            }
+                            Text("📋 Data CSV", color = LaporanWhite, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                         }
 
                         Spacer(Modifier.height(24.dp))
@@ -506,78 +538,5 @@ private fun DatePickerField(value: String, onClick: () -> Unit) {
             Text(value, color = LaporanWhite, fontSize = 13.sp)
             Icon(Icons.Default.CalendarToday, "Pilih tanggal", tint = LaporanGrey, modifier = Modifier.size(18.dp))
         }
-    }
-}
-
-// ── Bottom bar ────────────────────────────────────────────────────────────────
-@Composable
-fun LaporanBottomBar(
-    onHomeClick   : () -> Unit = {},
-    onPanggilClick: () -> Unit = {},
-    onUserClick   : () -> Unit = {},
-    currentTab    : String     = "laporan"
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(LaporanBottomBarBg)
-            .border(1.dp, LaporanBottomBorder, RoundedCornerShape(0.dp))
-            .navigationBarsPadding()
-    ) {
-        Row(
-            modifier              = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment     = Alignment.CenterVertically
-        ) {
-            LaporanBottomItem(
-                icon       = Icons.Outlined.Home,
-                label      = "Homepage",
-                isSelected = currentTab == "home",
-                onClick    = onHomeClick
-            )
-            LaporanBottomItem(
-                icon       = Icons.Outlined.Notifications,
-                label      = "Panggil",
-                isSelected = currentTab == "panggil",
-                onClick    = onPanggilClick
-            )
-            LaporanBottomItem(
-                icon       = Icons.Outlined.Person,
-                label      = "User",
-                isSelected = currentTab == "user",
-                onClick    = onUserClick
-            )
-        }
-    }
-}
-
-@Composable
-private fun LaporanBottomItem(
-    icon      : ImageVector,   // ← Ganti dari String
-    label     : String,
-    isSelected: Boolean,
-    onClick   : () -> Unit
-) {
-    val labelColor = if (isSelected) LaporanGreenBright else LaporanGrey
-
-    Column(
-        modifier            = Modifier
-            .clickable(onClick = onClick)
-            .padding(horizontal = 24.dp, vertical = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Icon(                      // ← Ganti dari Text(emoji)
-            imageVector = icon,
-            contentDescription = label,
-            tint = labelColor,
-            modifier = Modifier.size(28.dp)
-        )
-        Spacer(Modifier.height(2.dp))
-        Text(
-            text       = label,
-            color      = labelColor,
-            fontSize   = 10.sp,
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-        )
     }
 }
