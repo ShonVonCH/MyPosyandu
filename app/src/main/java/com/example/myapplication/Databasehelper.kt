@@ -9,9 +9,50 @@ class DatabaseHelper(context: Context) :
 
     companion object {
         const val DATABASE_NAME    = "posyandu.db"
-        const val DATABASE_VERSION = 14           // naik dari 13 → 14 (tambah tabel antrian lokal)
+        const val DATABASE_VERSION = 17          // naik dari 15 → 16 (re-struktur menu sehat)
 
-        // ── Tabel pemeriksaan ─────────────────────────────────────
+        // ── Tabel menu_kategori ───────────────────────────────────
+        const val TABLE_MENU_KATEGORI    = "menu_kategori"
+        const val COL_MK_ID              = "id"
+        const val COL_MK_NAMA            = "nama"
+        const val COL_MK_RANGE_USIA      = "range_usia"
+
+        // ── Tabel menu_sehat ──────────────────────────────────────
+        const val TABLE_MENU_SEHAT       = "menu_sehat"
+        const val COL_MS_ID              = "id"
+        const val COL_MS_KATEGORI_ID     = "kategori_id"
+        const val COL_MS_JUDUL           = "judul"
+        const val COL_MS_RANGE_USIA      = "range_usia"
+        const val COL_MS_DURASI          = "durasi_menit"
+        const val COL_MS_BAHAN           = "bahan"
+        const val COL_MS_CARA_MEMBUAT    = "cara_membuat"
+        const val COL_MS_GIZI            = "kandungan_gizi"
+
+        // ─────────────────────────────────────────────────────────
+        //  DDL
+        // ─────────────────────────────────────────────────────────
+
+        private const val SQL_CREATE_MENU_KATEGORI = """
+            CREATE TABLE IF NOT EXISTS $TABLE_MENU_KATEGORI (
+                $COL_MK_ID         TEXT PRIMARY KEY,
+                $COL_MK_NAMA       TEXT NOT NULL,
+                $COL_MK_RANGE_USIA TEXT
+            )
+        """
+
+        private const val SQL_CREATE_MENU_SEHAT = """
+            CREATE TABLE IF NOT EXISTS $TABLE_MENU_SEHAT (
+                $COL_MS_ID           TEXT PRIMARY KEY,
+                $COL_MS_KATEGORI_ID  TEXT,
+                $COL_MS_JUDUL        TEXT NOT NULL,
+                $COL_MS_RANGE_USIA   TEXT,
+                $COL_MS_DURASI       INTEGER,
+                $COL_MS_BAHAN        TEXT,
+                $COL_MS_CARA_MEMBUAT TEXT,
+                $COL_MS_GIZI         TEXT,
+                FOREIGN KEY($COL_MS_KATEGORI_ID) REFERENCES $TABLE_MENU_KATEGORI($COL_MK_ID)
+            )
+        """
         const val TABLE_PEMERIKSAAN      = "pemeriksaan"
         const val COL_PMRK_ID            = "id"
         const val COL_PMRK_ANAK_ID       = "anak_id"
@@ -314,6 +355,8 @@ class DatabaseHelper(context: Context) :
         db.execSQL(SQL_CREATE_LAPORAN)
         db.execSQL(SQL_CREATE_ANTRIAN)
         db.execSQL(SQL_CREATE_ANTRIAN_ITEM)
+        db.execSQL(SQL_CREATE_MENU_KATEGORI)
+        db.execSQL(SQL_CREATE_MENU_SEHAT)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -345,9 +388,21 @@ class DatabaseHelper(context: Context) :
         if (oldVersion < 13) {
             db.execSQL(SQL_CREATE_LAPORAN)
         }
-        if (oldVersion < 14) {
-            db.execSQL(SQL_CREATE_ANTRIAN)
-            db.execSQL(SQL_CREATE_ANTRIAN_ITEM)
+        if (oldVersion < 15) {
+            db.execSQL(SQL_CREATE_MENU_KATEGORI)
+            db.execSQL(SQL_CREATE_MENU_SEHAT)
+        }
+        if (oldVersion < 16) {
+            db.execSQL("DROP TABLE IF EXISTS $TABLE_MENU_SEHAT")
+            db.execSQL("DROP TABLE IF EXISTS $TABLE_MENU_KATEGORI")
+            db.execSQL(SQL_CREATE_MENU_KATEGORI)
+            db.execSQL(SQL_CREATE_MENU_SEHAT)
+        }
+        if (oldVersion < 17) {
+            db.execSQL("DROP TABLE IF EXISTS $TABLE_MENU_SEHAT")
+            db.execSQL("DROP TABLE IF EXISTS $TABLE_MENU_KATEGORI")
+            db.execSQL(SQL_CREATE_MENU_KATEGORI)
+            db.execSQL(SQL_CREATE_MENU_SEHAT)
         }
     }
 

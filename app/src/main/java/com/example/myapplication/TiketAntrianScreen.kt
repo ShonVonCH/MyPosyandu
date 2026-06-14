@@ -20,113 +20,221 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 // ─────────────────────────────────────────────────────────────
 //  Warna Lokal
 // ─────────────────────────────────────────────────────────────
-private val TikHeaderBlue = Color(0xFF1964A3)
-private val TikTicketBlue = Color(0xFF1A6EBA)
+private val TikHeaderBlue     = Color(0xFF1964A3)
+private val TikTicketBlue     = Color(0xFF1A6EBA)
 private val TikBackgroundDark = Color(0xFF121212)
-private val TikSurfaceDark = Color(0xFF2A2A2A)
-private val TikTextWhite = Color(0xFFFFFFFF)
-private val TikTextGrey = Color(0xFF888888)
-private val TikMintInfoBg = Color(0xFF98E6C8)
-private val TikMintInfoText = Color(0xFF14634B)
+private val TikSurfaceDark    = Color(0xFF2A2A2A)
+private val TikTextWhite      = Color(0xFFFFFFFF)
+private val TikTextGrey       = Color(0xFF888888)
+private val TikMintInfoBg     = Color(0xFF98E6C8)
+private val TikMintInfoText   = Color(0xFF14634B)
+private val TikErrorBg        = Color(0xFF3A1A1A)
+private val TikErrorText      = Color(0xFFDD6F6F)
+
+// ─────────────────────────────────────────────────────────────
+//  State holder data tiket
+// ─────────────────────────────────────────────────────────────
+private data class TiketState(
+    val nomorAntrian  : String  = "---",
+    val namaAnak      : String  = "",
+    val tanggal       : String  = "",
+    val nomorDipanggil: String  = "--",
+    val sisaGiliran   : String  = "--",
+    val sudahAmbil    : Boolean = false
+)
 
 @Composable
 fun TiketAntrianScreen(
     username: String = "",
-    onNavigateToHome: () -> Unit = {},
-    onNavigateToTicket: () -> Unit = {},
-    onNavigateToFood: () -> Unit = {},
+    onNavigateToHome   : () -> Unit = {},
+    onNavigateToTicket : () -> Unit = {},
+    onNavigateToFood   : () -> Unit = {},
     onNavigateToProfile: () -> Unit = {}
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
+    val scope   = rememberCoroutineScope()
 
-    // ✅ TAMBAH: State untuk data dinamis
-    var isLoading by remember { mutableStateOf(true) }
-    var nomorAntrian by remember { mutableStateOf("---") }
-    var namaAnak by remember { mutableStateOf("") }
-    var tanggalAntrian by remember { mutableStateOf("") }
-    var nomorDipanggil by remember { mutableStateOf("---") }
-    var sisaGiliran by remember { mutableStateOf("--") }
+    var isLoading    by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf("") }
+    var tiket        by remember { mutableStateOf(TiketState()) }
 
-    // Load data antrian dari API
-    LaunchedEffect(username) {
+    // ── Fungsi load — bisa dipanggil untuk refresh ──
+    suspend fun loadData() {
         if (username.isBlank()) {
+            errorMessage = "Username tidak tersedia. Silakan login ulang."
             isLoading = false
-            errorMessage = "Username tidak tersedia"
-            return@LaunchedEffect
+            return
         }
 
+        isLoading    = true
+        errorMessage = ""
+
         try {
-            // Ambil antrian aktif hari ini
-            val antrianAktif = AntrianApiService.getAntrianAktifHariIni(context)
+            val db = DatabaseHelper(context).readableDatabase
 
-            if (antrianAktif != null) {
-                // Ambil semua item antrian
-                val items = AntrianApiService.getAntrianItems(context, antrianAktif.id)
+            // 1. Cari ortu_id dari username
+            val cursorOrtu = db.rawQuery(
+                "SELECT ${DatabaseHelper.COL_ORTU_ID} FROM ${DatabaseHelper.TABLE_ORTU} " +
+                        "WHERE ${DatabaseHelper.COL_ORTU_USERNAME} = ? LIMIT 1",
+                arrayOf(username)
+            )
+            var ortuId = if (cursorOrtu.moveToFirst()) cursorOrtu.getString(0) ?: "" else ""
+            cursorOrtu.close()
 
-                // Cari item milik user ini (berdasarkan ortu_id)
-                val db = DatabaseHelper(context).readableDatabase
-                val cursorOrtu = db.rawQuery(
-                    "SELECT ${DatabaseHelper.COL_ORTU_ID} FROM ${DatabaseHelper.TABLE_ORTU} " +
-                            "WHERE ${DatabaseHelper.COL_ORTU_USERNAME} = ?",
+            // Fallback: cari dari tabel users jika tidak ada di ortu
+            if (ortuId.isBlank()) {
+                val cursorUsers = db.rawQuery(
+                    "SELECT ${DatabaseHelper.COL_USERS_ID} FROM ${DatabaseHelper.TABLE_USERS} " +
+                            "WHERE ${DatabaseHelper.COL_USERS_USERNAME} = ? LIMIT 1",
                     arrayOf(username)
                 )
-                val ortuId = if (cursorOrtu.moveToFirst()) cursorOrtu.getString(0) ?: "" else ""
-                cursorOrtu.close()
+                ortuId = if (cursorUsers.moveToFirst()) cursorUsers.getString(0) ?: "" else ""
+                cursorUsers.close()
+            }
 
-                // Cari item antrian untuk ortu ini
-                val itemSaya = items.find { it.ortuId == ortuId && it.status == 1 }
+            if (ortuId.isBlank()) {
+                db.close()
+                errorMessage = "Data pengguna tidak ditemukan. Coba sinkronisasi ulang."
+                isLoading = false
+                return
+            }
 
-                if (itemSaya != null) {
-                    // Ambil nama anak
+            android.util.Log.d("TIKET", "ortuId=$ortuId, username=$username")
+
+            // 2. Ambil antrian aktif hari ini dari API (dengan fallback ke lokal)
+            val antrianAktif = AntrianApiService.getAntrianAktifHariIni(context)
+            android.util.Log.d("TIKET", "antrianAktif=${antrianAktif?.id}")
+
+            if (antrianAktif == null) {
+                // Tidak ada antrian aktif hari ini — cek apakah ortu sudah punya tiket lokal
+                val today = getCurrentDate()
+                val cursorLokal = db.rawQuery(
+                    "SELECT ai.${DatabaseHelper.COL_ANTITEM_NOMOR}, ai.${DatabaseHelper.COL_ANTITEM_ANAK_ID}, " +
+                            "       ai.${DatabaseHelper.COL_ANTITEM_STATUS} " +
+                            "FROM ${DatabaseHelper.TABLE_ANTRIAN_ITEM} ai " +
+                            "JOIN ${DatabaseHelper.TABLE_ANTRIAN} a ON ai.${DatabaseHelper.COL_ANTITEM_ANTRIAN_ID} = a.${DatabaseHelper.COL_ANT_ID} " +
+                            "WHERE a.${DatabaseHelper.COL_ANT_TANGGAL} = ? " +
+                            "  AND ai.${DatabaseHelper.COL_ANTITEM_ORTU_ID} = ? " +
+                            "  AND ai.${DatabaseHelper.COL_ANTITEM_STATUS} = 1 " +
+                            "LIMIT 1",
+                    arrayOf(today, ortuId)
+                )
+                if (cursorLokal.moveToFirst()) {
+                    val nomor   = cursorLokal.getInt(0)
+                    val anakId  = cursorLokal.getString(1) ?: ""
+                    cursorLokal.close()
+
                     val cursorAnak = db.rawQuery(
                         "SELECT ${DatabaseHelper.COL_ANAK_NAMA} FROM ${DatabaseHelper.TABLE_ANAK} " +
-                                "WHERE ${DatabaseHelper.COL_ANAK_ID} = ?",
-                        arrayOf(itemSaya.anakId)
+                                "WHERE ${DatabaseHelper.COL_ANAK_ID} = ?", arrayOf(anakId)
                     )
-                    val namaAnakDb = if (cursorAnak.moveToFirst()) cursorAnak.getString(0) ?: "Anak" else "Anak"
+                    val namaAnak = if (cursorAnak.moveToFirst()) cursorAnak.getString(0) ?: "" else ""
                     cursorAnak.close()
 
-                    nomorAntrian = itemSaya.nomor.toString().padStart(3, '0')
-                    namaAnak = namaAnakDb
-                    tanggalAntrian = antrianAktif.id.take(10) // atau format tanggal dari antrian
-
-                    // Hitung sisa giliran
-                    val nomorSaatIni = antrianAktif.nomorSaatIni
-                    val sisa = items.count { it.status == 1 && it.nomor > nomorSaatIni && it.nomor < itemSaya.nomor }
-                    sisaGiliran = sisa.toString()
+                    tiket = TiketState(
+                        nomorAntrian   = nomor.toString().padStart(3, '0'),
+                        namaAnak       = namaAnak,
+                        tanggal        = formatTanggalTiket(today),
+                        nomorDipanggil = "--",
+                        sisaGiliran    = "--",
+                        sudahAmbil     = true
+                    )
+                } else {
+                    cursorLokal.close()
+                    errorMessage = "Tidak ada antrian aktif hari ini."
                 }
-
-                // Nomor yang sedang dipanggil
-                val itemDipanggil = items.find { it.status == 0 }
-                nomorDipanggil = itemDipanggil?.nomor?.toString()?.padStart(3, '0') ?: "000"
-
                 db.close()
-            } else {
-                errorMessage = "Tidak ada antrian aktif hari ini"
+                isLoading = false
+                return
             }
+
+            // 3. Ambil semua item antrian dari server
+            val items = AntrianApiService.getAntrianItems(context, antrianAktif.id)
+            android.util.Log.d("TIKET", "Total items: ${items.size}")
+
+            // 4. Cari item milik ortu ini (status 1 = menunggu)
+            val itemSaya = items.find { it.ortuId == ortuId && it.status == 1 }
+            android.util.Log.d("TIKET", "itemSaya: nomor=${itemSaya?.nomor}, anakId=${itemSaya?.anakId}")
+
+            // 5. Nomor yang sedang dipanggil = nomorSaatIni dari header antrian
+            //    Kalau 0 berarti belum ada yang dipanggil → tampil "--"
+            val nomorSaatIni   = antrianAktif.nomorSaatIni
+            val nomorDipanggil = if (nomorSaatIni > 0)
+                nomorSaatIni.toString().padStart(3, '0')
+            else "--"
+
+            if (itemSaya != null) {
+                // Ambil nama anak
+                val cursorAnak = db.rawQuery(
+                    "SELECT ${DatabaseHelper.COL_ANAK_NAMA} FROM ${DatabaseHelper.TABLE_ANAK} " +
+                            "WHERE ${DatabaseHelper.COL_ANAK_ID} = ?",
+                    arrayOf(itemSaya.anakId)
+                )
+                val namaAnak = if (cursorAnak.moveToFirst()) cursorAnak.getString(0) ?: "Anak" else "Anak"
+                cursorAnak.close()
+
+                // Sisa giliran = nomor_saya - nomorSaatIni - 1
+                // Contoh: saya nomor 7, dipanggil sekarang 1 → sisa = 7 - 1 - 1 = 5
+                // Kalau belum ada yang dipanggil (nomorSaatIni=0) → sisa = nomor_saya - 1
+                val sisa = if (nomorSaatIni > 0)
+                    maxOf(0, itemSaya.nomor - nomorSaatIni - 1)
+                else
+                    maxOf(0, itemSaya.nomor - 1)
+
+                tiket = TiketState(
+                    nomorAntrian   = itemSaya.nomor.toString().padStart(3, '0'),
+                    namaAnak       = namaAnak,
+                    tanggal        = formatTanggalTiket(getCurrentDate()),
+                    nomorDipanggil = nomorDipanggil,
+                    sisaGiliran    = sisa.toString(),
+                    sudahAmbil     = true
+                )
+            } else {
+                // Ortu belum ambil antrian
+                tiket = TiketState(
+                    nomorAntrian   = "---",
+                    namaAnak       = "",
+                    tanggal        = formatTanggalTiket(getCurrentDate()),
+                    nomorDipanggil = nomorDipanggil,
+                    sisaGiliran    = "--",
+                    sudahAmbil     = false
+                )
+            }
+
+            db.close()
         } catch (e: Exception) {
             android.util.Log.e("TIKET_ANTRIAN", "Error: ${e.message}", e)
-            errorMessage = "Gagal memuat data: ${e.message}"
+            errorMessage = "Gagal memuat data antrian: ${e.message}"
         } finally {
             isLoading = false
         }
     }
 
+    // Load pertama kali
+    LaunchedEffect(username) {
+        loadData()
+    }
+
     // Auto-refresh setiap 30 detik
     LaunchedEffect(Unit) {
         while (true) {
-            kotlinx.coroutines.delay(30000) // 30 detik
-            // Refresh data...
+            delay(30_000)
+            if (username.isNotBlank()) {
+                try { loadData() } catch (_: Exception) {}
+            }
         }
     }
 
@@ -134,9 +242,9 @@ fun TiketAntrianScreen(
         backgroundColor = TikBackgroundDark,
         bottomBar = {
             BottomNavBarOrtuTiket(
-                onHomeClick = onNavigateToHome,
-                onTicketClick = onNavigateToTicket,
-                onFoodClick = onNavigateToFood,
+                onHomeClick    = onNavigateToHome,
+                onTicketClick  = onNavigateToTicket,
+                onFoodClick    = onNavigateToFood,
                 onProfileClick = onNavigateToProfile
             )
         }
@@ -155,48 +263,95 @@ fun TiketAntrianScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                if (isLoading) {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().padding(32.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(color = TikHeaderBlue)
-                    }
-                } else if (errorMessage.isNotEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFF3A1A1A))
-                            .padding(16.dp)
-                    ) {
-                        Text(
-                            text = errorMessage,
-                            color = Color(0xFFDD6F6F),
-                            fontSize = 14.sp
-                        )
-                    }
-                } else {
-                    // Kartu Tiket Biru
-                    CardTiketUtama(
-                        nomorAntrian = nomorAntrian,
-                        namaTanggal = if (namaAnak.isNotBlank()) "$namaAnak - $tanggalAntrian" else "Belum ada antrian",
-                        dipanggilSekarang = nomorDipanggil,
-                        sisaGiliran = sisaGiliran
-                    )
-
-                    // Kartu Info Hijau Mint
-                    CardInfoMint(
-                        pesan = when {
-                            nomorAntrian == "---" -> "Anda belum mengambil antrian. Silakan ambil antrian di menu sebelumnya."
-                            nomorDipanggil == nomorAntrian -> "Giliran Anda! Silakan menuju loket pemeriksaan."
-                            else -> "Anda akan dipanggil saat giliran mendekati antrian Anda. Nomor ${nomorDipanggil} sedang dipanggil."
+                when {
+                    isLoading -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(48.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator(color = TikHeaderBlue)
+                                Spacer(Modifier.height(12.dp))
+                                Text("Memuat data antrian...", color = TikTextGrey, fontSize = 14.sp)
+                            }
                         }
-                    )
+                    }
+
+                    errorMessage.isNotEmpty() -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(TikErrorBg)
+                                .padding(16.dp)
+                        ) {
+                            Text(
+                                text = errorMessage,
+                                color = TikErrorText,
+                                fontSize = 14.sp,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
+                        // Tombol Refresh
+                        Button(
+                            onClick = { scope.launch { loadData() } },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(backgroundColor = TikHeaderBlue)
+                        ) {
+                            Text("Coba Lagi", color = TikTextWhite, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    else -> {
+                        // Kartu Tiket Biru
+                        CardTiketUtama(
+                            nomorAntrian       = tiket.nomorAntrian,
+                            namaAnak           = if (tiket.namaAnak.isNotBlank()) tiket.namaAnak else "Belum ambil antrian",
+                            tanggal            = tiket.tanggal,
+                            dipanggilSekarang  = tiket.nomorDipanggil,
+                            sisaGiliran        = tiket.sisaGiliran
+                        )
+
+                        // Kartu Info Hijau Mint
+                        val pesan = when {
+                            !tiket.sudahAmbil ->
+                                "Anda belum mengambil antrian. Silakan ambil antrian di menu sebelumnya."
+                            tiket.nomorDipanggil == "--" ->
+                                "Belum ada antrian yang dipanggil. Harap menunggu."
+                            tiket.sudahAmbil && tiket.nomorDipanggil == tiket.nomorAntrian ->
+                                "Giliran Anda! Silakan menuju loket pemeriksaan."
+                            else ->
+                                "Nomor ${tiket.nomorDipanggil} sedang dipanggil. Anda akan dipanggil saat giliran mendekati nomor Anda."
+                        }
+                        CardInfoMint(pesan = pesan)
+
+                        // Tombol Refresh Manual
+                        TextButton(
+                            onClick = { scope.launch { loadData() } },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("↻  Perbarui Status", color = TikTextGrey, fontSize = 13.sp)
+                        }
+                    }
                 }
             }
         }
     }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Helper: format tanggal "2026-06-14" → "Minggu, 14 Juni 2026"
+// ─────────────────────────────────────────────────────────────
+private fun formatTanggalTiket(raw: String): String {
+    return try {
+        val sdfIn  = SimpleDateFormat("yyyy-MM-dd", Locale("id", "ID"))
+        val sdfOut = SimpleDateFormat("EEEE, d MMMM yyyy", Locale("id", "ID"))
+        sdfOut.format(sdfIn.parse(raw)!!)
+    } catch (_: Exception) { raw }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -205,10 +360,11 @@ fun TiketAntrianScreen(
 
 @Composable
 private fun CardTiketUtama(
-    nomorAntrian: String,
-    namaTanggal: String,
+    nomorAntrian     : String,
+    namaAnak         : String,
+    tanggal          : String,
     dipanggilSekarang: String,
-    sisaGiliran: String
+    sisaGiliran      : String
 ) {
     Column(
         modifier = Modifier
@@ -219,54 +375,57 @@ private fun CardTiketUtama(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "NOMOR ANTRIAN ANDA",
-            color = TikTextWhite,
-            fontSize = 16.sp,
+            text       = "NOMOR ANTRIAN ANDA",
+            color      = TikTextWhite,
+            fontSize   = 16.sp,
             fontWeight = FontWeight.Bold
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(Modifier.height(8.dp))
 
         Text(
-            text = nomorAntrian,
-            color = TikTextWhite,
-            fontSize = 80.sp,
+            text       = nomorAntrian,
+            color      = TikTextWhite,
+            fontSize   = 80.sp,
             fontWeight = FontWeight.Bold,
             lineHeight = 80.sp
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(Modifier.height(4.dp))
 
         Text(
-            text = namaTanggal,
-            color = TikTextWhite,
-            fontSize = 18.sp,
+            text       = namaAnak,
+            color      = TikTextWhite,
+            fontSize   = 18.sp,
             fontWeight = FontWeight.Bold
         )
 
-        Divider(
-            color = TikTextWhite,
-            thickness = 1.dp,
-            modifier = Modifier.padding(vertical = 16.dp)
+        Text(
+            text     = tanggal,
+            color    = TikTextWhite.copy(alpha = 0.8f),
+            fontSize = 13.sp
         )
 
-        // Baris Bawah: Dipanggil Sekarang & Sisa Giliran
+        Divider(
+            color     = TikTextWhite.copy(alpha = 0.4f),
+            thickness = 1.dp,
+            modifier  = Modifier.padding(vertical = 16.dp)
+        )
+
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
+            modifier                = Modifier.fillMaxWidth(),
+            horizontalArrangement   = Arrangement.SpaceEvenly,
+            verticalAlignment       = Alignment.CenterVertically
         ) {
-            // Kolom Kiri
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.weight(1f)
             ) {
                 Text("Dipanggil Sekarang", color = TikTextWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(Modifier.height(8.dp))
                 Text(dipanggilSekarang, color = TikTextWhite, fontSize = 32.sp, fontWeight = FontWeight.Bold)
             }
 
-            // Garis Pemisah Vertikal
             Box(
                 modifier = Modifier
                     .width(1.dp)
@@ -274,13 +433,12 @@ private fun CardTiketUtama(
                     .background(TikTextWhite.copy(alpha = 0.5f))
             )
 
-            // Kolom Kanan
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.weight(1f)
             ) {
                 Text("Sisa Giliran", color = TikTextWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(Modifier.height(8.dp))
                 Text(sisaGiliran, color = TikTextWhite, fontSize = 32.sp, fontWeight = FontWeight.Bold)
             }
         }
@@ -297,9 +455,9 @@ private fun CardInfoMint(pesan: String) {
             .padding(16.dp)
     ) {
         Text(
-            text = pesan,
-            color = TikMintInfoText,
-            fontSize = 16.sp,
+            text       = pesan,
+            color      = TikMintInfoText,
+            fontSize   = 16.sp,
             fontWeight = FontWeight.Bold,
             lineHeight = 22.sp
         )
@@ -320,9 +478,9 @@ private fun HeaderSimple() {
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = "MyPosyandu",
-            color = TikTextWhite,
-            fontSize = 16.sp,
+            text       = "MyPosyandu",
+            color      = TikTextWhite,
+            fontSize   = 16.sp,
             fontWeight = FontWeight.Bold
         )
     }
@@ -330,34 +488,33 @@ private fun HeaderSimple() {
 
 @Composable
 private fun BottomNavBarOrtuTiket(
-    onHomeClick: () -> Unit,
-    onTicketClick: () -> Unit,
-    onFoodClick: () -> Unit,
+    onHomeClick   : () -> Unit,
+    onTicketClick : () -> Unit,
+    onFoodClick   : () -> Unit,
     onProfileClick: () -> Unit
 ) {
     Row(
-        modifier = Modifier
+        modifier              = Modifier
             .fillMaxWidth()
             .background(TikSurfaceDark)
             .padding(vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment     = Alignment.CenterVertically
     ) {
-        NavIconPrivate(icon = Icons.Outlined.Home, isActive = false, onClick = onHomeClick)
-        NavIconPrivate(icon = Icons.Outlined.ConfirmationNumber, isActive = true, onClick = onTicketClick)
-        NavIconPrivate(icon = Icons.Outlined.Restaurant, isActive = false, onClick = onFoodClick)
-        NavIconPrivate(icon = Icons.Outlined.Person, isActive = false, onClick = onProfileClick)
+        NavIconPrivate(icon = Icons.Outlined.Home,               isActive = false, onClick = onHomeClick)
+        NavIconPrivate(icon = Icons.Outlined.ConfirmationNumber, isActive = true,  onClick = onTicketClick)
+        NavIconPrivate(icon = Icons.Outlined.Restaurant,         isActive = false, onClick = onFoodClick)
+        NavIconPrivate(icon = Icons.Outlined.Person,             isActive = false, onClick = onProfileClick)
     }
 }
 
 @Composable
 private fun NavIconPrivate(icon: ImageVector, isActive: Boolean, onClick: () -> Unit) {
-    val tintColor = if (isActive) TikHeaderBlue else TikTextWhite.copy(alpha = 0.5f)
     Icon(
-        imageVector = icon,
+        imageVector        = icon,
         contentDescription = null,
-        tint = tintColor,
-        modifier = Modifier
+        tint               = if (isActive) TikHeaderBlue else TikTextWhite.copy(alpha = 0.5f),
+        modifier           = Modifier
             .size(32.dp)
             .clickable(onClick = onClick)
     )

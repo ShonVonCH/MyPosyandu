@@ -117,24 +117,39 @@ object AntrianApiService {
                 return@withContext getAntrianAktifFromLocal(context)
             }
 
+            // Helper: cari antrian cocok dari JSONArray
+            fun findFromArray(arr: JSONArray): AntrianApi? {
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    // Cocokkan tanggal; status "0" atau "aktif" keduanya dianggap aktif
+                    val tgl = obj.optString("tanggal")
+                    val st  = obj.optString("status")
+                    if (tgl == today && (st == "0" || st == "aktif")) {
+                        return toAntrianApi(obj)
+                    }
+                }
+                // Kalau tidak ada filter status yg cocok, ambil yg tanggalnya sama
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    if (obj.optString("tanggal") == today) return toAntrianApi(obj)
+                }
+                return null
+            }
+
             val antrian: AntrianApi? = when {
                 body.trimStart().startsWith("[") -> {
-                    val arr = JSONArray(body)
-                    var found: AntrianApi? = null
-                    for (i in 0 until arr.length()) {
-                        val obj = arr.getJSONObject(i)
-                        if (obj.optString("tanggal") == today &&
-                            obj.optString("status")  == "aktif") {
-                            found = toAntrianApi(obj)
-                            break
-                        }
-                    }
-                    found
+                    findFromArray(JSONArray(body))
                 }
                 body.trimStart().startsWith("{") -> {
                     val j = JSONObject(body)
                     when {
-                        j.optBoolean("success") && j.has("data") -> toAntrianApi(j.getJSONObject("data"))
+                        // {"status":"success","data":[...]}
+                        j.has("data") && j.optJSONArray("data") != null ->
+                            findFromArray(j.getJSONArray("data"))
+                        // {"status":"success","data":{...}}
+                        j.has("data") && j.optJSONObject("data") != null ->
+                            toAntrianApi(j.getJSONObject("data"))
+                        // objek langsung
                         j.has("id") -> toAntrianApi(j)
                         else -> null
                     }
@@ -162,29 +177,22 @@ object AntrianApiService {
     // ═════════════════════════════════════════════════════════════════════
     suspend fun getAntrianItems(context: Context, antrianId: String): List<AntrianItemApi> = withContext(Dispatchers.IO) {
         try {
-            val body = getJson("$API_ANTRIAN?antrian_id=$antrianId")
-            var list = parseItems(body)
-
-            if (list.isEmpty()) {
-                // Fallback endpoint: antrian_item.php?antrian_id=...
-                val body2 = getJson("$API_ANTRIAN_ITEM?antrian_id=$antrianId")
-                list = parseItems(body2)
-            }
+            // antrian_item.php adalah endpoint yang benar untuk list item
+            val body = getJson("$API_ANTRIAN_ITEM?antrian_id=$antrianId")
+            android.util.Log.d("ANTRIAN_API", "getAntrianItems raw: ${body.take(300)}")
+            val list = parseItems(body)
+            android.util.Log.d("ANTRIAN_API", "getAntrianItems parsed: ${list.size} items")
 
             if (list.isNotEmpty()) {
-                // ── Sync items ke local DB ──
                 saveAntrianItemsToLocal(context, list)
-                android.util.Log.d("ANTRIAN_LOCAL", "${list.size} antrian_item di-sync ke local DB")
                 return@withContext list
             }
 
-            // Tidak ada data dari server → pakai lokal
             android.util.Log.w("ANTRIAN_API", "getAntrianItems: server kosong, pakai lokal")
             getAntrianItemsFromLocal(context, antrianId)
 
         } catch (e: Exception) {
             android.util.Log.e("ANTRIAN_API", "getAntrianItems error: ${e.message}", e)
-            // Fallback ke lokal jika network error
             getAntrianItemsFromLocal(context, antrianId)
         }
     }
@@ -285,7 +293,7 @@ object AntrianApiService {
 
             // ── Simpan item baru ke local DB ──
             val itemId = try { JSONObject(itemBody).optString("id", UUID.randomUUID().toString()) }
-                         catch (e: Exception) { UUID.randomUUID().toString() }
+            catch (e: Exception) { UUID.randomUUID().toString() }
             val newItem = AntrianItemApi(
                 id             = itemId,
                 antrianId      = antrianId,
@@ -452,11 +460,11 @@ object AntrianApiService {
             val db = DatabaseHelper(context).readableDatabase
             val cursor = db.rawQuery(
                 "SELECT ${DatabaseHelper.COL_ANT_ID}, ${DatabaseHelper.COL_ANT_JADWAL_ID}, " +
-                "${DatabaseHelper.COL_ANT_NOMOR_SAAT_INI}, ${DatabaseHelper.COL_ANT_TOTAL_ANTRIAN}, " +
-                "${DatabaseHelper.COL_ANT_STATUS} " +
-                "FROM ${DatabaseHelper.TABLE_ANTRIAN} " +
-                "WHERE ${DatabaseHelper.COL_ANT_TANGGAL} = ? AND ${DatabaseHelper.COL_ANT_STATUS} = 'aktif' " +
-                "LIMIT 1",
+                        "${DatabaseHelper.COL_ANT_NOMOR_SAAT_INI}, ${DatabaseHelper.COL_ANT_TOTAL_ANTRIAN}, " +
+                        "${DatabaseHelper.COL_ANT_STATUS} " +
+                        "FROM ${DatabaseHelper.TABLE_ANTRIAN} " +
+                        "WHERE ${DatabaseHelper.COL_ANT_TANGGAL} = ? AND ${DatabaseHelper.COL_ANT_STATUS} = 'aktif' " +
+                        "LIMIT 1",
                 arrayOf(today)
             )
             val result = if (cursor.moveToFirst()) {
@@ -485,12 +493,12 @@ object AntrianApiService {
             val db = DatabaseHelper(context).readableDatabase
             val cursor = db.rawQuery(
                 "SELECT ${DatabaseHelper.COL_ANTITEM_ID}, ${DatabaseHelper.COL_ANTITEM_ANTRIAN_ID}, " +
-                "${DatabaseHelper.COL_ANTITEM_ANAK_ID}, ${DatabaseHelper.COL_ANTITEM_ORTU_ID}, " +
-                "${DatabaseHelper.COL_ANTITEM_NOMOR}, ${DatabaseHelper.COL_ANTITEM_WAKTU_AMBIL}, " +
-                "${DatabaseHelper.COL_ANTITEM_WAKTU_DIPANGGIL}, ${DatabaseHelper.COL_ANTITEM_STATUS} " +
-                "FROM ${DatabaseHelper.TABLE_ANTRIAN_ITEM} " +
-                "WHERE ${DatabaseHelper.COL_ANTITEM_ANTRIAN_ID} = ? " +
-                "ORDER BY ${DatabaseHelper.COL_ANTITEM_NOMOR} ASC",
+                        "${DatabaseHelper.COL_ANTITEM_ANAK_ID}, ${DatabaseHelper.COL_ANTITEM_ORTU_ID}, " +
+                        "${DatabaseHelper.COL_ANTITEM_NOMOR}, ${DatabaseHelper.COL_ANTITEM_WAKTU_AMBIL}, " +
+                        "${DatabaseHelper.COL_ANTITEM_WAKTU_DIPANGGIL}, ${DatabaseHelper.COL_ANTITEM_STATUS} " +
+                        "FROM ${DatabaseHelper.TABLE_ANTRIAN_ITEM} " +
+                        "WHERE ${DatabaseHelper.COL_ANTITEM_ANTRIAN_ID} = ? " +
+                        "ORDER BY ${DatabaseHelper.COL_ANTITEM_NOMOR} ASC",
                 arrayOf(antrianId)
             )
             val list = mutableListOf<AntrianItemApi>()

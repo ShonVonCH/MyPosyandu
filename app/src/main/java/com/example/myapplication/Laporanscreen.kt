@@ -13,6 +13,10 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.runtime.*
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -525,31 +529,53 @@ fun LaporanBottomBar(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment     = Alignment.CenterVertically
         ) {
-            LaporanBottomItem("🏠", "Homepage", currentTab == "home",    onHomeClick)
-            LaporanBottomItem("📣", "Panggil",  currentTab == "panggil", onPanggilClick)
-            LaporanBottomItem("👤", "User",     currentTab == "user",    onUserClick)
+            LaporanBottomItem(
+                icon       = Icons.Outlined.Home,
+                label      = "Homepage",
+                isSelected = currentTab == "home",
+                onClick    = onHomeClick
+            )
+            LaporanBottomItem(
+                icon       = Icons.Outlined.Notifications,
+                label      = "Panggil",
+                isSelected = currentTab == "panggil",
+                onClick    = onPanggilClick
+            )
+            LaporanBottomItem(
+                icon       = Icons.Outlined.Person,
+                label      = "User",
+                isSelected = currentTab == "user",
+                onClick    = onUserClick
+            )
         }
     }
 }
 
 @Composable
 private fun LaporanBottomItem(
-    emoji     : String,
+    icon      : ImageVector,   // ← Ganti dari String
     label     : String,
     isSelected: Boolean,
     onClick   : () -> Unit
 ) {
+    val labelColor = if (isSelected) LaporanGreenBright else LaporanGrey
+
     Column(
         modifier            = Modifier
             .clickable(onClick = onClick)
             .padding(horizontal = 24.dp, vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(emoji, fontSize = 22.sp)
+        Icon(                      // ← Ganti dari Text(emoji)
+            imageVector = icon,
+            contentDescription = label,
+            tint = labelColor,
+            modifier = Modifier.size(28.dp)
+        )
         Spacer(Modifier.height(2.dp))
         Text(
             text       = label,
-            color      = if (isSelected) LaporanGreenBright else LaporanGrey,
+            color      = labelColor,
             fontSize   = 10.sp,
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
         )

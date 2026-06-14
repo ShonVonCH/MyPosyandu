@@ -8,14 +8,20 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Card
+import androidx.compose.material.Icon
 import androidx.compose.material.LinearProgressIndicator
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -32,7 +38,7 @@ fun DashboardScreen(
     jadwalBulanIni      : Int   = 0,
     onNavigateToDataAnak: () -> Unit = {},
     onNavigateToLaporan : () -> Unit = {},
-    onNavigateToPanggil : () -> Unit = {},
+    onNavigateToPanggil : () -> Unit = {},  // ← TAMBAH INI
     onNavigateToUser    : () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -55,7 +61,7 @@ fun DashboardScreen(
         bottomBar = {
             DashboardBottomBar(
                 onHomeClick    = { /* already on home */ },
-                onPanggilClick = onNavigateToPanggil,
+                onPanggilClick = onNavigateToPanggil,  // ← Sambungkan ke sini
                 onLaporanClick = onNavigateToLaporan,
                 onUserClick    = onNavigateToUser,
                 currentTab     = "home"
@@ -145,19 +151,19 @@ fun DashboardBottomBar(
             verticalAlignment     = Alignment.CenterVertically
         ) {
             DashBottomItem(
-                emoji      = "🏠",
+                icon       = Icons.Outlined.Home,
                 label      = "Homepage",
                 isSelected = currentTab == "home",
                 onClick    = onHomeClick
             )
             DashBottomItem(
-                emoji      = "📣",
+                icon       = Icons.Outlined.Notifications,  // ← Icon untuk Panggil
                 label      = "Panggil",
                 isSelected = currentTab == "panggil",
                 onClick    = onPanggilClick
             )
             DashBottomItem(
-                emoji      = "👤",
+                icon       = Icons.Outlined.Person,
                 label      = "User",
                 isSelected = currentTab == "user",
                 onClick    = onUserClick
@@ -168,7 +174,7 @@ fun DashboardBottomBar(
 
 @Composable
 private fun DashBottomItem(
-    emoji     : String,
+    icon      : ImageVector,   // ← Ganti dari String (emoji) ke ImageVector
     label     : String,
     isSelected: Boolean,
     onClick   : () -> Unit
@@ -181,7 +187,12 @@ private fun DashBottomItem(
             .padding(horizontal = 24.dp, vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(text = emoji, fontSize = 22.sp)
+        Icon(                      // ← Ganti dari Text(emoji) ke Icon()
+            imageVector = icon,
+            contentDescription = label,
+            tint = labelColor,
+            modifier = Modifier.size(28.dp)
+        )
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text       = label,

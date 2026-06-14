@@ -75,6 +75,7 @@ fun AppNavigation() {
         }
 
         // ── DASHBOARD KADER ──────────────────────────────────────────────────
+// ── DASHBOARD KADER ──────────────────────────────────────────────────
         composable("dashboard") {
             val context = LocalContext.current
 
@@ -103,6 +104,9 @@ fun AppNavigation() {
                 },
                 onNavigateToLaporan  = {
                     safeNavigate { navController.navigate("laporan") { launchSingleTop = true } }
+                },
+                onNavigateToPanggil  = {   // ← TAMBAH INI
+                    safeNavigate { navController.navigate("antrian_kader") { launchSingleTop = true } }
                 }
             )
         }
@@ -172,6 +176,9 @@ fun AppNavigation() {
                 },
                 onNavigateToTicket = {
                     safeNavigate { navController.navigate("antrian_ortu") { launchSingleTop = true } }
+                },
+                onNavigateToFood = {
+                    safeNavigate { navController.navigate("menu_sehat") { launchSingleTop = true } }
                 }
             )
         }
@@ -251,8 +258,78 @@ fun AppNavigation() {
                     }
                 },
                 onNavigateToTicket  = { },
-                onNavigateToFood    = { },
+                onNavigateToFood    = {
+                    safeNavigate { navController.navigate("menu_sehat") { launchSingleTop = true } }
+                },
                 onNavigateToProfile = { }
+            )
+        }
+
+        // ── MENU SEHAT ───────────────────────────────────────────────────────
+        composable("menu_sehat") {
+            val username = formViewModel.loggedInOrangTuaUsername
+            MenuSehatScreen(
+                onNavigateToAgeGroup = { ageGroup ->
+                    val encodedAge = android.net.Uri.encode(ageGroup)
+                    safeNavigate { navController.navigate("menu_list/$encodedAge") }
+                },
+                onNavigateToDetail = { id ->
+                    safeNavigate { navController.navigate("menu_detail/$id") }
+                },
+                onNavigateToHome = {
+                    navController.navigate("dashboard_orangtua/$username") {
+                        popUpTo("dashboard_orangtua/$username") { inclusive = true }
+                    }
+                },
+                onNavigateToTicket = {
+                    navController.navigate("antrian_ortu") { launchSingleTop = true }
+                },
+                onNavigateToProfile = { /* TODO */ }
+            )
+        }
+
+        composable(
+            route = "menu_list/{ageGroup}",
+            arguments = listOf(navArgument("ageGroup") { type = NavType.StringType })
+        ) { backStack ->
+            val username = formViewModel.loggedInOrangTuaUsername
+            val ageGroup = backStack.arguments?.getString("ageGroup") ?: ""
+            MenuListScreen(
+                ageGroup = ageGroup,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToDetail = { id ->
+                    safeNavigate { navController.navigate("menu_detail/$id") }
+                },
+                onNavigateToHome = {
+                    navController.navigate("dashboard_orangtua/$username") {
+                        popUpTo("dashboard_orangtua/$username") { inclusive = true }
+                    }
+                },
+                onNavigateToTicket = {
+                    navController.navigate("antrian_ortu") { launchSingleTop = true }
+                },
+                onNavigateToProfile = { /* TODO */ }
+            )
+        }
+
+        composable(
+            route = "menu_detail/{menuId}",
+            arguments = listOf(navArgument("menuId") { type = NavType.StringType })
+        ) { backStack ->
+            val username = formViewModel.loggedInOrangTuaUsername
+            val menuId = backStack.arguments?.getString("menuId") ?: ""
+            MenuDetailScreen(
+                menuId = menuId,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToHome = {
+                    navController.navigate("dashboard_orangtua/$username") {
+                        popUpTo("dashboard_orangtua/$username") { inclusive = true }
+                    }
+                },
+                onNavigateToTicket = {
+                    navController.navigate("antrian_ortu") { launchSingleTop = true }
+                },
+                onNavigateToProfile = { /* TODO */ }
             )
         }
 

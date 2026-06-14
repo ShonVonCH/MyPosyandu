@@ -135,11 +135,40 @@ fun AntrianOrtuScreen(
             }
             cursorPosyandu.close()
 
-            // Cek antrian aktif hari ini dari API untuk cross-check status
+            // Cek antrian aktif hari ini dari API (dengan fallback ke lokal)
             val antrianAktif = AntrianApiService.getAntrianAktifHariIni(context)
             val antrianItemsHariIni: List<AntrianItemApi> = if (antrianAktif != null) {
                 AntrianApiService.getAntrianItems(context, antrianAktif.id)
             } else emptyList()
+
+            // Buat map cepat: anak_id → AntrianItemApi (dari API, semua status)
+            val itemByAnakApi = antrianItemsHariIni
+                .filter { it.ortuId == userId }
+                .associateBy { it.anakId }
+            val nomorByAnakApi = itemByAnakApi.mapValues { it.value.nomor }
+
+            // Fallback lokal: cek TABLE_ANTRIAN_ITEM langsung by anak_id + tanggal hari ini
+            // Dipakai kalau API tidak return antrian aktif (getAntrianAktifHariIni null)
+            val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+            fun getNomorLokal(anakId: String): Int? {
+                return try {
+                    val cur = db.rawQuery(
+                        "SELECT ai.${DatabaseHelper.COL_ANTITEM_NOMOR} " +
+                                "FROM ${DatabaseHelper.TABLE_ANTRIAN_ITEM} ai " +
+                                "JOIN ${DatabaseHelper.TABLE_ANTRIAN} a " +
+                                "  ON ai.${DatabaseHelper.COL_ANTITEM_ANTRIAN_ID} = a.${DatabaseHelper.COL_ANT_ID} " +
+                                "WHERE a.${DatabaseHelper.COL_ANT_TANGGAL} = ? " +
+                                "  AND ai.${DatabaseHelper.COL_ANTITEM_ANAK_ID} = ? " +
+                                "  AND ai.${DatabaseHelper.COL_ANTITEM_ORTU_ID} = ? " +
+                                "  AND ai.${DatabaseHelper.COL_ANTITEM_STATUS} = 1 " +
+                                "LIMIT 1",
+                        arrayOf(today, anakId, userId)
+                    )
+                    val nomor = if (cur.moveToFirst()) cur.getInt(0) else null
+                    cur.close()
+                    nomor
+                } catch (e: Exception) { null }
+            }
 
             // Query anak langsung pakai userId sebagai ortu_id
             val cursorAnak = db.rawQuery(
@@ -160,12 +189,17 @@ fun AntrianOrtuScreen(
                 val tglLahir = cursorAnak.getString(2) ?: ""
                 val umurBulan = hitungUmurBulanAntrian(tglLahir)
 
-                // Cek apakah anak ini sudah ambil antrian hari ini (status 1 = menunggu)
-                val itemAnak = antrianItemsHariIni.find { it.anakId == id && it.status == 1 }
-                val sudahAmbil = itemAnak != null
-                val nomorAntrian = itemAnak?.nomor?.toString()?.padStart(3, '0')
+                // Hanya status 1 (menunggu) yang dianggap sudah ambil antrian
+                // Status 0 (dipanggil) dan 2 (tidak hadir/selesai) → hilang dari list = belum ambil
+                val itemApi      = itemByAnakApi[id]
+                val masihMenunggu = itemApi?.status == 1
+                val nomorApi     = if (masihMenunggu) nomorByAnakApi[id] else null
+                val nomorLokal   = if (nomorApi == null && masihMenunggu) getNomorLokal(id) else null
+                val nomor        = nomorApi ?: nomorLokal
+                val sudahAmbil   = nomor != null
+                val nomorAntrian = nomor?.toString()?.padStart(3, '0')
 
-                android.util.Log.d("ANTRIAN_ORTU", "Anak: id=$id, nama=$nama, umur=$umurBulan, sudahAmbil=$sudahAmbil")
+                android.util.Log.d("ANTRIAN_ORTU", "Anak: id=$id, nama=$nama, status=${itemApi?.status}, sudahAmbil=$sudahAmbil")
 
                 list.add(
                     AnakAntrianData(
@@ -302,7 +336,8 @@ fun AntrianOrtuScreen(
                             CardAntrianAktif(
                                 nama = anak.nama,
                                 usia = "${anak.umurBulan} Bulan",
-                                nomorAntrian = anak.nomorAntrian
+                                nomorAntrian = anak.nomorAntrian,
+                                onClick = onNavigateToTicket
                             )
                         } else {
                             CardAmbilAntrian(
@@ -429,13 +464,19 @@ private fun HeaderAntrianOrtu(namaOrtu: String = "", posyanduInfo: String = "") 
 }
 
 @Composable
-private fun CardAntrianAktif(nama: String, usia: String, nomorAntrian: String) {
+private fun CardAntrianAktif(
+    nama: String,
+    usia: String,
+    nomorAntrian: String,
+    onClick: () -> Unit = {}
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(AntSurfaceDark)
             .border(2.dp, AntNeonGreen, RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
             .padding(12.dp)
     ) {
         Row(
