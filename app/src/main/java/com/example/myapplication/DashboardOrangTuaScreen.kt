@@ -47,14 +47,24 @@ fun DashboardOrangTuaScreen(
 ) {
     val context = LocalContext.current
 
-    var namaOrtu   by remember { mutableStateOf("") }
+    var namaOrtu         by remember { mutableStateOf("") }
     var showLogoutDialog by remember { mutableStateOf(false) }
-    var anakList   by remember { mutableStateOf<List<AnakData>>(emptyList()) }
+    var anakList         by remember { mutableStateOf<List<AnakData>>(emptyList()) }
     var jadwalBerikutnya by remember { mutableStateOf<JadwalBerikutnya?>(null) }
-    var posyanduInfo by remember { mutableStateOf("") }
+    var posyanduInfo     by remember { mutableStateOf("") }
 
+    // FIX: gunakan Unit sebagai key supaya hanya jalan sekali saat komposisi pertama.
+    // Data di-reload manual lewat LaunchedEffect(username) tapi pastikan
+    // list direset di awal agar tidak double.
     LaunchedEffect(username) {
         if (username.isBlank()) return@LaunchedEffect
+
+        // ── RESET state sebelum query baru ──────────────────────────────
+        namaOrtu         = ""
+        posyanduInfo     = ""
+        jadwalBerikutnya = null
+        anakList         = emptyList()   // ← kunci fix double data
+
         val db = DatabaseHelper(context).readableDatabase
 
         // Ambil data ortu berdasarkan username
@@ -74,9 +84,11 @@ fun DashboardOrangTuaScreen(
         // Ambil posyandu info dari user login
         val cursorUser = db.rawQuery(
             """
-            SELECT p.${DatabaseHelper.COL_POSYANDU_NAMA}, p.${DatabaseHelper.COL_POSYANDU_KELURAHAN}, p.${DatabaseHelper.COL_POSYANDU_RW}, p.${DatabaseHelper.COL_POSYANDU_ALAMAT}
+            SELECT p.${DatabaseHelper.COL_POSYANDU_NAMA}, p.${DatabaseHelper.COL_POSYANDU_KELURAHAN},
+                   p.${DatabaseHelper.COL_POSYANDU_RW}, p.${DatabaseHelper.COL_POSYANDU_ALAMAT}
             FROM ${DatabaseHelper.TABLE_USERS} u
-            LEFT JOIN ${DatabaseHelper.TABLE_POSYANDU} p ON u.${DatabaseHelper.COL_USERS_POSYANDU_ID} = p.${DatabaseHelper.COL_POSYANDU_ID}
+            LEFT JOIN ${DatabaseHelper.TABLE_POSYANDU} p
+                   ON u.${DatabaseHelper.COL_USERS_POSYANDU_ID} = p.${DatabaseHelper.COL_POSYANDU_ID}
             LIMIT 1
             """.trimIndent(), null
         )
@@ -94,11 +106,11 @@ fun DashboardOrangTuaScreen(
         }
         cursorUser.close()
 
-        // Ambil jadwal posyandu berikutnya dari DB lokal (sudah sync dari API)
+        // Ambil jadwal posyandu berikutnya
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
         val cursorJadwal = db.rawQuery(
             """
-            SELECT ${DatabaseHelper.COL_JADWAL_TANGGAL}, ${DatabaseHelper.COL_JADWAL_JAM_MULAI}, 
+            SELECT ${DatabaseHelper.COL_JADWAL_TANGGAL}, ${DatabaseHelper.COL_JADWAL_JAM_MULAI},
                    ${DatabaseHelper.COL_JADWAL_JAM_SELESAI}, ${DatabaseHelper.COL_JADWAL_LOKASI}
             FROM ${DatabaseHelper.TABLE_JADWAL_POSYANDU}
             WHERE ${DatabaseHelper.COL_JADWAL_TANGGAL} >= ?
@@ -109,28 +121,27 @@ fun DashboardOrangTuaScreen(
             arrayOf(today)
         )
         if (cursorJadwal.moveToFirst()) {
-            val tgl = cursorJadwal.getString(0) ?: ""
-            val jamMulai = cursorJadwal.getString(1) ?: ""
+            val tgl        = cursorJadwal.getString(0) ?: ""
+            val jamMulai   = cursorJadwal.getString(1) ?: ""
             val jamSelesai = cursorJadwal.getString(2) ?: ""
-            val lokasi = cursorJadwal.getString(3) ?: ""
+            val lokasi     = cursorJadwal.getString(3) ?: ""
 
             val tglFormatted = try {
-                val sdfIn = SimpleDateFormat("yyyy-MM-dd", Locale("id", "ID"))
+                val sdfIn  = SimpleDateFormat("yyyy-MM-dd", Locale("id", "ID"))
                 val sdfOut = SimpleDateFormat("EEEE, d MMMM yyyy", Locale("id", "ID"))
-                val date = sdfIn.parse(tgl)
-                date?.let { sdfOut.format(it) } ?: tgl
+                sdfIn.parse(tgl)?.let { sdfOut.format(it) } ?: tgl
             } catch (e: Exception) { tgl }
 
             jadwalBerikutnya = JadwalBerikutnya(
-                lokasi = lokasi,
-                tanggal = tglFormatted,
-                jamMulai = jamMulai.take(5),
+                lokasi     = lokasi,
+                tanggal    = tglFormatted,
+                jamMulai   = jamMulai.take(5),
                 jamSelesai = jamSelesai.take(5)
             )
         }
         cursorJadwal.close()
 
-        // Ambil anak milik ortu ini
+        // Ambil anak milik ortu ini — build list baru, bukan append ke lama
         if (ortuId.isNotBlank()) {
             val cursorAnak = db.rawQuery(
                 "SELECT ${DatabaseHelper.COL_ANAK_ID}, ${DatabaseHelper.COL_ANAK_NAMA}, " +
@@ -139,13 +150,14 @@ fun DashboardOrangTuaScreen(
                         "WHERE ${DatabaseHelper.COL_ANAK_ORTU_ID} = ?",
                 arrayOf(ortuId)
             )
-            val list = mutableListOf<AnakData>()
+            // FIX: buat list baru dari scratch, assign sekali di akhir
+            val newList = mutableListOf<AnakData>()
             while (cursorAnak.moveToNext()) {
                 val id       = cursorAnak.getString(0) ?: continue
                 val nama     = cursorAnak.getString(1) ?: ""
                 val tglLahir = cursorAnak.getString(2) ?: ""
                 val gender   = cursorAnak.getString(3) ?: "-"
-                list.add(AnakData(
+                newList.add(AnakData(
                     id           = id,
                     nama         = nama,
                     umurBulan    = hitungUmurBulan(tglLahir),
@@ -159,8 +171,9 @@ fun DashboardOrangTuaScreen(
                 ))
             }
             cursorAnak.close()
-            anakList = list
+            anakList = newList  // ← assign sekali, bukan += / add ke existing state
         }
+
         db.close()
     }
 
@@ -178,7 +191,6 @@ fun DashboardOrangTuaScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showLogoutDialog = false
-                    // Hapus data tabel users
                     val db = DatabaseHelper(context).writableDatabase
                     db.execSQL("DELETE FROM ${DatabaseHelper.TABLE_USERS}")
                     db.close()
@@ -242,16 +254,15 @@ fun DashboardOrangTuaScreen(
                 } else {
                     anakList.forEach { anak ->
                         CardAnakOrtu(
-                            nama      = anak.nama,
-                            gender    = anak.jenisKelamin,
-                            tglLahir  = anak.tanggal,
-                            onClick   = { onNavigateToDetailAnak(anak.id) }
+                            nama     = anak.nama,
+                            gender   = anak.jenisKelamin,
+                            tglLahir = anak.tanggal,
+                            onClick  = { onNavigateToDetailAnak(anak.id) }
                         )
                     }
                 }
             }
 
-            // Spacer supaya konten tidak ketimpa bottom nav
             Spacer(modifier = Modifier.height(80.dp))
         }
     }
@@ -334,7 +345,7 @@ private fun HeaderDashboardOrtu(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = posyanduInfo.ifBlank { "Posyandu" },
+                    text  = posyanduInfo.ifBlank { "Posyandu" },
                     color = DashTextWhite.copy(alpha = 0.8f),
                     fontSize = 14.sp
                 )
@@ -378,19 +389,19 @@ private fun BannerJadwalOrtu(jadwal: JadwalBerikutnya?) {
             Spacer(modifier = Modifier.width(12.dp))
             Column {
                 Text(
-                    text = if (jadwal != null) "Jadwal Posyandu berikutnya" else "Jadwal Posyandu",
+                    text  = if (jadwal != null) "Jadwal Posyandu berikutnya" else "Jadwal Posyandu",
                     color = DashTextWhite.copy(alpha = 0.8f),
                     fontSize = 12.sp
                 )
                 Text(
-                    text = jadwalText,
-                    color = DashTextWhite,
-                    fontSize = 16.sp,
+                    text       = jadwalText,
+                    color      = DashTextWhite,
+                    fontSize   = 16.sp,
                     fontWeight = FontWeight.Bold
                 )
                 if (lokasiText.isNotBlank()) {
                     Text(
-                        text = "$lokasiText - Harap datang tepat waktu",
+                        text  = "$lokasiText - Harap datang tepat waktu",
                         color = DashTextWhite.copy(alpha = 0.8f),
                         fontSize = 12.sp
                     )

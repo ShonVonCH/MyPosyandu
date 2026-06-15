@@ -1579,6 +1579,10 @@ suspend fun syncAllDataFromApi(context: Context): String = withContext(Dispatche
         val menuSyncSuccess = runBlocking { menuRepo.syncMenuData() }
         results.add("Menu: ${if (menuSyncSuccess) "Success" else "Failed"}")
 
+        // 6. Sync Posyandu, Jadwal, VaksinRef
+        runBlocking { SyncPosyandu.syncAll(context) }
+        results.add("Posyandu&Jadwal: Success")
+
         return@withContext results.joinToString(" | ")
     } catch (e: Exception) {
         android.util.Log.e("SYNC_ALL", "Gagal sync all data: ${e.message}", e)

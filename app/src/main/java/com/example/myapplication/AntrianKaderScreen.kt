@@ -52,15 +52,15 @@ private val KaderMenungguBorder = Color(0xFF00C896)
 //  Data class tampilan list antrian kader
 // ─────────────────────────────────────────────────────────────
 data class AntrianKaderItem(
-    val id       : String,
-    val nomor    : Int,
-    val namaAnak : String,
-    val namaOrtu : String,
-    val usia     : String,
-    val status   : Int,       // 1=menunggu, 0=dipanggil, 2=tdk hadir
+    val id        : String,
+    val nomor     : Int,
+    val namaAnak  : String,
+    val namaOrtu  : String,
+    val usia      : String,
+    val status    : Int,       // 1=menunggu, 0=dipanggil, 2=tdk hadir
     val waktuAmbil: String,
-    val anakId   : String,    // untuk deduplikasi
-    val ortuId   : String     // untuk deduplikasi
+    val anakId    : String,
+    val ortuId    : String
 )
 
 @Composable
@@ -74,13 +74,14 @@ fun AntrianKaderScreen(
     val context = LocalContext.current
     val scope   = rememberCoroutineScope()
 
-    var antrianItems   by remember { mutableStateOf<List<AntrianKaderItem>>(emptyList()) }
-    var nomorDipanggil by remember { mutableStateOf("--") }
-    var isLoading      by remember { mutableStateOf(false) }
-    var posyanduNama   by remember { mutableStateOf("") }
-    var jadwalInfo     by remember { mutableStateOf("") }
+    var antrianItems     by remember { mutableStateOf<List<AntrianKaderItem>>(emptyList()) }
+    var nomorDipanggil   by remember { mutableStateOf("--") }
+    var isLoading        by remember { mutableStateOf(false) }
+    var posyanduNama     by remember { mutableStateOf("") }
+    var jadwalInfo       by remember { mutableStateOf("") }
     var showLogoutDialog by remember { mutableStateOf(false) }
 
+    // ── Logout Dialog ───────────────────────────────────────────────────────
     if (showLogoutDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
@@ -94,9 +95,12 @@ fun AntrianKaderScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showLogoutDialog = false
+                    // FIX: matikan foreign key dulu sebelum delete
                     try {
                         val db = DatabaseHelper(context).writableDatabase
+                        db.execSQL("PRAGMA foreign_keys = OFF")
                         db.execSQL("DELETE FROM ${DatabaseHelper.TABLE_USERS}")
+                        db.execSQL("PRAGMA foreign_keys = ON")
                         db.close()
                     } catch (e: Exception) {
                         android.util.Log.e("LOGOUT_ERROR", "Error clearing user table: ${e.message}")
@@ -114,7 +118,7 @@ fun AntrianKaderScreen(
         )
     }
 
-    // ── Load data antrian dari API ──────────────────────────────────────
+    // ── Load data antrian dari API ──────────────────────────────────────────
     suspend fun loadData() {
         isLoading = true
         try {
@@ -132,7 +136,7 @@ fun AntrianKaderScreen(
 
             val db = DatabaseHelper(context).readableDatabase
 
-            // Ambil info posyandu & jadwal dari DB
+            // Ambil nama posyandu dari DB
             val cursorKader = db.rawQuery(
                 "SELECT p.${DatabaseHelper.COL_POSYANDU_NAMA} " +
                         "FROM ${DatabaseHelper.TABLE_USERS} u " +
@@ -143,8 +147,7 @@ fun AntrianKaderScreen(
             if (cursorKader.moveToFirst()) posyanduNama = cursorKader.getString(0) ?: ""
             cursorKader.close()
 
-            // ── Filter: status 1 = menunggu ──────────────────────────────
-            // Deduplikasi: kalau ortu_id + anak_id sama, ambil satu (nomor terkecil)
+            // Filter status 1 = menunggu, dedup ortu+anak
             val menunggu = items
                 .filter { it.status == 1 }
                 .groupBy { "${it.ortuId}__${it.anakId}" }
@@ -154,7 +157,7 @@ fun AntrianKaderScreen(
             android.util.Log.d("KADER", "Menunggu setelah dedup: ${menunggu.size}")
 
             val mappedItems = menunggu.map { item ->
-                // Nama anak
+                // Nama & umur anak
                 val cursorAnak = db.rawQuery(
                     "SELECT ${DatabaseHelper.COL_ANAK_NAMA}, ${DatabaseHelper.COL_ANAK_TGL_LAHIR} " +
                             "FROM ${DatabaseHelper.TABLE_ANAK} WHERE ${DatabaseHelper.COL_ANAK_ID} = ?",
@@ -181,15 +184,15 @@ fun AntrianKaderScreen(
                 cursorOrtu.close()
 
                 AntrianKaderItem(
-                    id        = item.id,
-                    nomor     = item.nomor,
-                    namaAnak  = namaAnak,
-                    namaOrtu  = namaOrtu,
-                    usia      = umur,
-                    status    = item.status,
-                    waktuAmbil= item.waktuAmbil,
-                    anakId    = item.anakId,
-                    ortuId    = item.ortuId
+                    id         = item.id,
+                    nomor      = item.nomor,
+                    namaAnak   = namaAnak,
+                    namaOrtu   = namaOrtu,
+                    usia       = umur,
+                    status     = item.status,
+                    waktuAmbil = item.waktuAmbil,
+                    anakId     = item.anakId,
+                    ortuId     = item.ortuId
                 )
             }
 
@@ -207,13 +210,12 @@ fun AntrianKaderScreen(
         }
     }
 
-    // ── Panggil berikutnya ──────────────────────────────────────────────
+    // ── Panggil berikutnya ──────────────────────────────────────────────────
     suspend fun panggilBerikutnya() {
         try {
             val antrianAktif = AntrianApiService.getAntrianAktifHariIni(context) ?: return
             val items        = AntrianApiService.getAntrianItems(context, antrianAktif.id)
 
-            // Cari nomor terkecil yang masih menunggu (status 1), dedup ortu+anak
             val berikutnya = items
                 .filter { it.status == 1 }
                 .groupBy { "${it.ortuId}__${it.anakId}" }
@@ -230,14 +232,13 @@ fun AntrianKaderScreen(
         }
     }
 
-    // ── Tidak hadir ─────────────────────────────────────────────────────
+    // ── Tidak hadir ─────────────────────────────────────────────────────────
     suspend fun tidakHadir() {
         try {
             val antrianAktif = AntrianApiService.getAntrianAktifHariIni(context) ?: return
             val items        = AntrianApiService.getAntrianItems(context, antrianAktif.id)
             val nomorInt     = nomorDipanggil.toIntOrNull() ?: return
 
-            // Status 0 = sedang dipanggil
             val itemDipanggil = items.find { it.status == 0 && it.nomor == nomorInt }
             if (itemDipanggil != null) {
                 AntrianApiService.tidakHadir(itemDipanggil.id, antrianAktif.id)
@@ -293,8 +294,8 @@ fun AntrianKaderScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             Row(
-                modifier            = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment   = Alignment.CenterVertically,
+                modifier              = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment     = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
@@ -315,7 +316,7 @@ fun AntrianKaderScreen(
             when {
                 isLoading -> {
                     Box(
-                        modifier        = Modifier.fillMaxWidth().padding(32.dp),
+                        modifier         = Modifier.fillMaxWidth().padding(32.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -328,22 +329,31 @@ fun AntrianKaderScreen(
 
                 antrianItems.isEmpty() -> {
                     Box(
-                        modifier        = Modifier.fillMaxWidth().padding(32.dp),
+                        modifier         = Modifier.fillMaxWidth().padding(32.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text      = "Tidak ada antrian yang menunggu",
-                            color     = KaderTextGrey,
-                            fontSize  = 14.sp,
-                            textAlign = TextAlign.Center
-                        )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text      = "Tidak ada antrian yang menunggu",
+                                color     = KaderTextGrey,
+                                fontSize  = 14.sp,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text      = "Ortu perlu ambil antrian terlebih dahulu",
+                                color     = KaderTextGrey.copy(alpha = 0.6f),
+                                fontSize  = 12.sp,
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
                 }
 
                 else -> {
                     Column(
-                        modifier              = Modifier.padding(horizontal = 16.dp),
-                        verticalArrangement   = Arrangement.spacedBy(8.dp)
+                        modifier            = Modifier.padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         antrianItems.forEach { item ->
                             CardMenunggu(
@@ -418,12 +428,12 @@ private fun KaderHeader(posyanduNama: String, jadwalInfo: String) {
             .padding(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 20.dp)
     ) {
         Text(
-            text      = "MyPosyandu",
-            color     = KaderTextWhite,
-            fontSize  = 16.sp,
-            fontWeight= FontWeight.Bold,
-            textAlign = TextAlign.Center,
-            modifier  = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+            text       = "MyPosyandu",
+            color      = KaderTextWhite,
+            fontSize   = 16.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign  = TextAlign.Center,
+            modifier   = Modifier.fillMaxWidth().padding(bottom = 16.dp)
         )
         Text(
             text       = "Antrian $posyanduNama",
@@ -432,9 +442,9 @@ private fun KaderHeader(posyanduNama: String, jadwalInfo: String) {
             fontWeight = FontWeight.Bold
         )
         Text(
-            text    = jadwalInfo,
-            color   = KaderTextWhite.copy(alpha = 0.8f),
-            fontSize= 14.sp
+            text     = jadwalInfo,
+            color    = KaderTextWhite.copy(alpha = 0.8f),
+            fontSize = 14.sp
         )
     }
 }
@@ -464,7 +474,7 @@ private fun CardDipanggil(nomor: String) {
 private fun ButtonPanggilBerikutnya(onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
-            .height(64.dp) // ✅ Fixed height
+            .height(64.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(KaderButtonGreen)
             .clickable(onClick = onClick),
@@ -485,7 +495,7 @@ private fun ButtonPanggilBerikutnya(onClick: () -> Unit, modifier: Modifier = Mo
 private fun ButtonTidakHadir(onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
-            .height(64.dp) // ✅ Fixed height same as above
+            .height(64.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(Color.Transparent)
             .border(2.dp, KaderButtonRed, RoundedCornerShape(10.dp))
@@ -518,10 +528,9 @@ private fun CardMenunggu(
             .border(1.dp, KaderMenungguBorder, RoundedCornerShape(10.dp))
             .clickable(onClick = onClick)
             .padding(12.dp),
-        verticalAlignment   = Alignment.CenterVertically,
+        verticalAlignment     = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Nomor antrian
         Text(
             text       = nomor,
             color      = KaderNeonGreen,
@@ -529,16 +538,12 @@ private fun CardMenunggu(
             fontWeight = FontWeight.Bold,
             modifier   = Modifier.width(48.dp)
         )
-
-        // Avatar
         Box(
             modifier = Modifier
                 .size(40.dp)
                 .clip(CircleShape)
                 .background(KaderAvatarMint)
         )
-
-        // Info anak + ortu
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text       = namaAnak,
@@ -548,9 +553,9 @@ private fun CardMenunggu(
             )
             if (usia.isNotBlank() || namaOrtu.isNotBlank()) {
                 Text(
-                    text    = listOf(usia, namaOrtu).filter { it.isNotBlank() }.joinToString(" · "),
-                    color   = KaderTextGrey,
-                    fontSize= 12.sp
+                    text     = listOf(usia, namaOrtu).filter { it.isNotBlank() }.joinToString(" · "),
+                    color    = KaderTextGrey,
+                    fontSize = 12.sp
                 )
             }
         }
@@ -595,16 +600,16 @@ private fun KaderBottomBar(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Icon(
-                        imageVector = entry.icon,
+                        imageVector        = entry.icon,
                         contentDescription = entry.label,
-                        tint = tint,
-                        modifier = Modifier.size(26.dp)
+                        tint               = tint,
+                        modifier           = Modifier.size(26.dp)
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = entry.label,
-                        color = tint,
-                        fontSize = 10.sp,
+                        text       = entry.label,
+                        color      = tint,
+                        fontSize   = 10.sp,
                         fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal
                     )
                 }
