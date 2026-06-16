@@ -75,11 +75,15 @@ fun AntrianKaderScreen(
     val scope   = rememberCoroutineScope()
 
     var antrianItems     by remember { mutableStateOf<List<AntrianKaderItem>>(emptyList()) }
+    var itemDipanggil    by remember { mutableStateOf<AntrianItemApi?>(null) }  // FIX: simpan item yang sedang dipanggil
     var nomorDipanggil   by remember { mutableStateOf("--") }
     var isLoading        by remember { mutableStateOf(false) }
     var posyanduNama     by remember { mutableStateOf("") }
+    var posyanduId       by remember { mutableStateOf<String?>(null) }
     var jadwalInfo       by remember { mutableStateOf("") }
     var showLogoutDialog by remember { mutableStateOf(false) }
+
+    val scaffoldState    = rememberScaffoldState()
 
     // ── Logout Dialog ───────────────────────────────────────────────────────
     if (showLogoutDialog) {
@@ -95,7 +99,6 @@ fun AntrianKaderScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showLogoutDialog = false
-                    // FIX: matikan foreign key dulu sebelum delete
                     try {
                         val db = DatabaseHelper(context).writableDatabase
                         db.execSQL("PRAGMA foreign_keys = OFF")
@@ -118,37 +121,59 @@ fun AntrianKaderScreen(
         )
     }
 
-    // ── Load data antrian dari API ──────────────────────────────────────────
-    suspend fun loadData() {
-        isLoading = true
+    // ── Load posyandu_id kader dari DB lokal (sekali saat init) ────────────
+    LaunchedEffect(Unit) {
         try {
-            val antrianAktif = AntrianApiService.getAntrianAktifHariIni(context)
-
-            if (antrianAktif == null) {
-                antrianItems   = emptyList()
-                nomorDipanggil = "--"
-                isLoading      = false
-                return
-            }
-
-            val items = AntrianApiService.getAntrianItems(context, antrianAktif.id)
-            android.util.Log.d("KADER", "Total items dari API: ${items.size}")
-
             val db = DatabaseHelper(context).readableDatabase
-
-            // Ambil nama posyandu dari DB
-            val cursorKader = db.rawQuery(
-                "SELECT p.${DatabaseHelper.COL_POSYANDU_NAMA} " +
+            val cur = db.rawQuery(
+                "SELECT ${DatabaseHelper.COL_USERS_POSYANDU_ID}, p.${DatabaseHelper.COL_POSYANDU_NAMA} " +
                         "FROM ${DatabaseHelper.TABLE_USERS} u " +
                         "JOIN ${DatabaseHelper.TABLE_POSYANDU} p " +
                         "  ON u.${DatabaseHelper.COL_USERS_POSYANDU_ID} = p.${DatabaseHelper.COL_POSYANDU_ID} " +
                         "LIMIT 1", null
             )
-            if (cursorKader.moveToFirst()) posyanduNama = cursorKader.getString(0) ?: ""
-            cursorKader.close()
+            if (cur.moveToFirst()) {
+                posyanduId   = cur.getString(0)
+                posyanduNama = cur.getString(1) ?: ""
+            }
+            cur.close()
+            db.close()
+        } catch (e: Exception) {
+            android.util.Log.e("ANTRIAN_KADER", "Load posyandu error: ${e.message}")
+        }
+    }
 
-            // Filter status 1 = menunggu, dedup ortu+anak
-            val menunggu = items
+    // ── Load data antrian dari API ──────────────────────────────────────────
+    suspend fun loadData() {
+        isLoading = true
+        try {
+            // FIX: gunakan posyanduId agar kader hanya lihat antrian posyanduny sendiri
+            val antrianAktif = AntrianApiService.getAntrianAktifHariIni(context, posyanduId)
+
+            if (antrianAktif == null) {
+                antrianItems   = emptyList()
+                itemDipanggil  = null
+                nomorDipanggil = "--"
+                isLoading      = false
+                return
+            }
+
+            val itemsRaw = AntrianApiService.getAntrianItems(context, antrianAktif.id)
+            android.util.Log.d("KADER", "Total items dari API: ${itemsRaw.size}")
+
+            val db = DatabaseHelper(context).readableDatabase
+
+            // FIX: Cari item yang sedang dipanggil (status=0) untuk tombol "Tidak Hadir"
+            val currentDipanggil = itemsRaw.find { it.status == 0 }
+            itemDipanggil = currentDipanggil
+
+            // Nomor dipanggil: ambil dari header antrian (nomor_saat_ini)
+            nomorDipanggil = if (antrianAktif.nomorSaatIni > 0)
+                antrianAktif.nomorSaatIni.toString().padStart(3, '0')
+            else "--"
+
+            // Filter hanya yang menunggu (status=1), dedup per ortu+anak
+            val menunggu = itemsRaw
                 .filter { it.status == 1 }
                 .groupBy { "${it.ortuId}__${it.anakId}" }
                 .mapNotNull { (_, group) -> group.minByOrNull { it.nomor } }
@@ -197,11 +222,7 @@ fun AntrianKaderScreen(
             }
 
             db.close()
-
-            antrianItems   = mappedItems
-            nomorDipanggil = if (antrianAktif.nomorSaatIni > 0)
-                antrianAktif.nomorSaatIni.toString().padStart(3, '0')
-            else "--"
+            antrianItems = mappedItems
 
         } catch (e: Exception) {
             android.util.Log.e("ANTRIAN_KADER", "Error load: ${e.message}", e)
@@ -213,9 +234,10 @@ fun AntrianKaderScreen(
     // ── Panggil berikutnya ──────────────────────────────────────────────────
     suspend fun panggilBerikutnya() {
         try {
-            val antrianAktif = AntrianApiService.getAntrianAktifHariIni(context) ?: return
+            val antrianAktif = AntrianApiService.getAntrianAktifHariIni(context, posyanduId) ?: return
             val items        = AntrianApiService.getAntrianItems(context, antrianAktif.id)
 
+            // FIX: cari item menunggu dengan nomor terkecil (item berikutnya)
             val berikutnya = items
                 .filter { it.status == 1 }
                 .groupBy { "${it.ortuId}__${it.anakId}" }
@@ -223,9 +245,19 @@ fun AntrianKaderScreen(
                 .minByOrNull { it.nomor }
 
             if (berikutnya != null) {
-                AntrianApiService.panggilAntrian(berikutnya.id)
-                nomorDipanggil = berikutnya.nomor.toString().padStart(3, '0')
-                loadData()
+                val ok = AntrianApiService.panggilAntrian(context, berikutnya)
+                if (ok) {
+                    val nomorBaru = berikutnya.nomor.toString().padStart(3, '0')
+                    nomorDipanggil = nomorBaru
+                    itemDipanggil  = berikutnya.copy(status = 0)
+                    scaffoldState.snackbarHostState.showSnackbar("Berhasil memanggil nomor $nomorBaru")
+                    kotlinx.coroutines.delay(800)
+                    loadData()
+                } else {
+                    scaffoldState.snackbarHostState.showSnackbar("Gagal memanggil antrian. Periksa koneksi.")
+                }
+            } else {
+                scaffoldState.snackbarHostState.showSnackbar("Tidak ada antrian yang menunggu")
             }
         } catch (e: Exception) {
             android.util.Log.e("ANTRIAN_KADER", "Error panggil: ${e.message}", e)
@@ -233,25 +265,69 @@ fun AntrianKaderScreen(
     }
 
     // ── Tidak hadir ─────────────────────────────────────────────────────────
+    // FIX: gunakan itemDipanggil yang disimpan di state, bukan cari ulang
+    //      berdasarkan nomorDipanggil yang mungkin belum match di list
     suspend fun tidakHadir() {
         try {
-            val antrianAktif = AntrianApiService.getAntrianAktifHariIni(context) ?: return
-            val items        = AntrianApiService.getAntrianItems(context, antrianAktif.id)
-            val nomorInt     = nomorDipanggil.toIntOrNull() ?: return
-
-            val itemDipanggil = items.find { it.status == 0 && it.nomor == nomorInt }
-            if (itemDipanggil != null) {
-                AntrianApiService.tidakHadir(itemDipanggil.id, antrianAktif.id)
+            val target = itemDipanggil
+            if (target == null) {
+                // Fallback: cari dari lokal berdasarkan nomorDipanggil
+                val antrianAktif = AntrianApiService.getAntrianAktifHariIni(context, posyanduId) ?: run {
+                    scaffoldState.snackbarHostState.showSnackbar("Tidak ada antrian aktif")
+                    return
+                }
+                val items    = AntrianApiService.getAntrianItems(context, antrianAktif.id)
+                val nomorInt = nomorDipanggil.toIntOrNull() ?: run {
+                    scaffoldState.snackbarHostState.showSnackbar("Belum ada yang dipanggil")
+                    return
+                }
+                // Cari item berdasarkan nomor (status bisa 0 atau 1, belum tentu terupdate)
+                val itemByNomor = items.find { it.nomor == nomorInt }
+                if (itemByNomor != null) {
+                    val ok = AntrianApiService.tidakHadir(context, itemByNomor)
+                    if (ok) {
+                        itemDipanggil = null
+                        scaffoldState.snackbarHostState.showSnackbar("Nomor $nomorDipanggil ditandai tidak hadir")
+                        kotlinx.coroutines.delay(500)
+                        loadData()
+                    }
+                } else {
+                    scaffoldState.snackbarHostState.showSnackbar("Item antrian tidak ditemukan")
+                }
+                return
             }
-            loadData()
+
+            val ok = AntrianApiService.tidakHadir(context, target)
+            if (ok) {
+                itemDipanggil = null
+                scaffoldState.snackbarHostState.showSnackbar("Nomor $nomorDipanggil ditandai tidak hadir")
+                kotlinx.coroutines.delay(500)
+                loadData()
+            } else {
+                scaffoldState.snackbarHostState.showSnackbar("Gagal tandai tidak hadir")
+            }
         } catch (e: Exception) {
             android.util.Log.e("ANTRIAN_KADER", "Error tidak hadir: ${e.message}", e)
         }
     }
 
-    LaunchedEffect(Unit) { loadData() }
+    // FIX: tunggu posyanduId selesai diload sebelum loadData()
+    LaunchedEffect(posyanduId) {
+        if (posyanduId != null || posyanduNama.isNotEmpty()) {
+            loadData()
+        }
+    }
+
+    // Fallback: jika posyanduId tidak ada dalam 2 detik, tetap load
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(2000)
+        if (!isLoading && antrianItems.isEmpty()) {
+            loadData()
+        }
+    }
 
     Scaffold(
+        scaffoldState   = scaffoldState,
         backgroundColor = KaderBackgroundDark,
         bottomBar = {
             KaderBottomBar(
@@ -285,8 +361,10 @@ fun AntrianKaderScreen(
                     onClick  = { scope.launch { panggilBerikutnya() } },
                     modifier = Modifier.weight(1f)
                 )
+                // FIX: tombol "Tidak Hadir" hanya aktif jika ada item yang sedang dipanggil
                 ButtonTidakHadir(
                     onClick  = { scope.launch { tidakHadir() } },
+                    enabled  = itemDipanggil != null || nomorDipanggil != "--",
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -362,13 +440,26 @@ fun AntrianKaderScreen(
                                 namaOrtu = item.namaOrtu,
                                 usia     = item.usia,
                                 onClick  = {
+                                    // Klik kartu = panggil item tersebut secara spesifik
                                     scope.launch {
                                         try {
-                                            val aktif = AntrianApiService.getAntrianAktifHariIni(context)
+                                            val aktif = AntrianApiService.getAntrianAktifHariIni(context, posyanduId)
                                             if (aktif != null) {
-                                                AntrianApiService.panggilAntrian(item.id)
-                                                nomorDipanggil = item.nomor.toString().padStart(3, '0')
-                                                loadData()
+                                                val fullItems = AntrianApiService.getAntrianItems(context, aktif.id)
+                                                val target = fullItems.find { it.id == item.id }
+                                                if (target != null) {
+                                                    val ok = AntrianApiService.panggilAntrian(context, target)
+                                                    if (ok) {
+                                                        val nomorBaru = item.nomor.toString().padStart(3, '0')
+                                                        nomorDipanggil = nomorBaru
+                                                        itemDipanggil  = target.copy(status = 0)
+                                                        scaffoldState.snackbarHostState.showSnackbar("Memanggil nomor $nomorBaru")
+                                                        kotlinx.coroutines.delay(800)
+                                                        loadData()
+                                                    } else {
+                                                        scaffoldState.snackbarHostState.showSnackbar("Gagal memanggil. Coba lagi.")
+                                                    }
+                                                }
                                             }
                                         } catch (e: Exception) {
                                             android.util.Log.e("ANTRIAN_KADER", "Error panggil item: ${e.message}", e)
@@ -492,19 +583,27 @@ private fun ButtonPanggilBerikutnya(onClick: () -> Unit, modifier: Modifier = Mo
 }
 
 @Composable
-private fun ButtonTidakHadir(onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun ButtonTidakHadir(
+    onClick : () -> Unit,
+    enabled : Boolean = true,
+    modifier: Modifier = Modifier
+) {
     Box(
         modifier = modifier
             .height(64.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(Color.Transparent)
-            .border(2.dp, KaderButtonRed, RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick),
+            .border(
+                2.dp,
+                if (enabled) KaderButtonRed else KaderButtonRed.copy(alpha = 0.3f),
+                RoundedCornerShape(10.dp)
+            )
+            .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text       = "Tidak Hadir",
-            color      = KaderButtonRed,
+            color      = if (enabled) KaderButtonRed else KaderButtonRed.copy(alpha = 0.3f),
             fontSize   = 14.sp,
             fontWeight = FontWeight.Bold,
             textAlign  = TextAlign.Center

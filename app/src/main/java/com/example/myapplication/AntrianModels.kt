@@ -3,7 +3,6 @@ package com.example.myapplication
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.UUID
 
 // ─────────────────────────────────────────────────────────────
 //  DATA CLASS: ANTRIAN (Header Antrian per Jadwal)
@@ -27,7 +26,7 @@ data class AntrianItemApi(
     val nomor: Int,
     val waktuAmbil: String,      // yyyy-MM-dd HH:mm:ss
     val waktuDipanggil: String?, // yyyy-MM-dd HH:mm:ss (null jika belum)
-    val status: Int              // 1 = menunggu, 0 = dipanggil/tidak hadir
+    val status: Int              // 1 = menunggu, 0 = dipanggil, 2 = tidak hadir
 )
 
 // ─────────────────────────────────────────────────────────────

@@ -74,13 +74,12 @@ object AntrianApiService {
 
     // ─────────────────────────────────────────────────────────────────────
     //  PRIVATE: Ambil jadwal_id aktif hari ini dari DB lokal
-    //  Dibutuhkan saat buat antrian header baru (FK ke jadwal_posyandu)
     // ─────────────────────────────────────────────────────────────────────
     private fun getJadwalAktifId(context: Context, posyanduId: String? = null): String? {
         return try {
             val today = getCurrentDate()
             val db    = DatabaseHelper(context).readableDatabase
-            
+
             val selection = if (posyanduId != null) {
                 "${DatabaseHelper.COL_JADWAL_TANGGAL} = ? " +
                         "  AND ${DatabaseHelper.COL_JADWAL_POSYANDU_ID} = ? " +
@@ -93,7 +92,7 @@ object AntrianApiService {
                         "       OR LOWER(${DatabaseHelper.COL_JADWAL_STATUS}) = 'terjadwal' " +
                         "       OR ${DatabaseHelper.COL_JADWAL_STATUS} IS NULL) "
             }
-            
+
             val selectionArgs = if (posyanduId != null) arrayOf(today, posyanduId) else arrayOf(today)
 
             val cursor = db.query(
@@ -114,16 +113,61 @@ object AntrianApiService {
         }
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    //  PRIVATE: Ambil posyandu_id dari user login (cek ortu dulu, fallback users)
+    // ─────────────────────────────────────────────────────────────────────
+    private fun getPosyanduIdForUser(context: Context, userId: String): String? {
+        return try {
+            val db = DatabaseHelper(context).readableDatabase
+            var posyanduId: String? = null
+
+            val cursorOrtu = db.rawQuery(
+                "SELECT ${DatabaseHelper.COL_ORTU_POSYANDU_ID} FROM ${DatabaseHelper.TABLE_ORTU} " +
+                        "WHERE ${DatabaseHelper.COL_ORTU_ID} = ?",
+                arrayOf(userId)
+            )
+            if (cursorOrtu.moveToFirst()) posyanduId = cursorOrtu.getString(0)
+            cursorOrtu.close()
+
+            if (posyanduId == null) {
+                val cursorUsers = db.rawQuery(
+                    "SELECT ${DatabaseHelper.COL_USERS_POSYANDU_ID} FROM ${DatabaseHelper.TABLE_USERS} " +
+                            "WHERE ${DatabaseHelper.COL_USERS_ID} = ?",
+                    arrayOf(userId)
+                )
+                if (cursorUsers.moveToFirst()) posyanduId = cursorUsers.getString(0)
+                cursorUsers.close()
+            }
+            db.close()
+            posyanduId
+        } catch (e: Exception) {
+            android.util.Log.e("ANTRIAN_API", "getPosyanduIdForUser error: ${e.message}", e)
+            null
+        }
+    }
+
     // ═════════════════════════════════════════════════════════════════════
     //  1. GET antrian aktif hari ini
+    //  FIX: filter berdasarkan posyanduId agar kader tidak ambil antrian
+    //       posyandu lain. posyanduId opsional (null = ambil semua).
     // ═════════════════════════════════════════════════════════════════════
-    suspend fun getAntrianAktifHariIni(context: Context): AntrianApi? = withContext(Dispatchers.IO) {
+    suspend fun getAntrianAktifHariIni(
+        context: Context,
+        posyanduId: String? = null
+    ): AntrianApi? = withContext(Dispatchers.IO) {
         try {
             val today = getCurrentDate()
-            val body  = getJson("$API_ANTRIAN?tanggal=$today")
+
+            // Bangun URL dengan filter posyandu_id jika ada
+            val url = if (posyanduId != null)
+                "$API_ANTRIAN?tanggal=$today&posyandu_id=$posyanduId"
+            else
+                "$API_ANTRIAN?tanggal=$today"
+
+            val body = getJson(url)
             if (!isJsonOk(body)) {
                 android.util.Log.w("ANTRIAN_API", "getAntrianAktif: server tidak bisa dijangkau, pakai lokal")
-                return@withContext getAntrianAktifFromLocal(context)
+                return@withContext getAntrianAktifFromLocal(context, posyanduId)
             }
 
             fun findFromArray(arr: JSONArray): AntrianApi? {
@@ -162,23 +206,35 @@ object AntrianApiService {
             antrian
         } catch (e: Exception) {
             android.util.Log.e("ANTRIAN_API", "getAntrianAktif error: ${e.message}", e)
-            getAntrianAktifFromLocal(context)
+            getAntrianAktifFromLocal(context, posyanduId)
         }
     }
 
     // ═════════════════════════════════════════════════════════════════════
     //  2. GET daftar item antrian
+    //  FIX: merge status lokal vs API — prioritaskan status lokal jika lebih
+    //       baru (0=dipanggil atau 2=tidak hadir lebih final dari 1=menunggu)
     // ═════════════════════════════════════════════════════════════════════
     suspend fun getAntrianItems(context: Context, antrianId: String): List<AntrianItemApi> = withContext(Dispatchers.IO) {
         try {
             val body = getJson("$API_ANTRIAN_ITEM?antrian_id=$antrianId")
             android.util.Log.d("ANTRIAN_API", "getAntrianItems raw: ${body.take(300)}")
-            val list = parseItems(body)
-            android.util.Log.d("ANTRIAN_API", "getAntrianItems parsed: ${list.size} items")
+            val listFromApi = parseItems(body)
+            android.util.Log.d("ANTRIAN_API", "getAntrianItems parsed: ${listFromApi.size} items")
 
-            if (list.isNotEmpty()) {
-                saveAntrianItemsToLocal(context, list)
-                return@withContext list
+            if (listFromApi.isNotEmpty()) {
+                // Ambil status lokal untuk merge — status lokal lebih final (0/2) menang
+                val localItems = getAntrianItemsFromLocal(context, antrianId)
+                    .associateBy { it.id }
+
+                val merged = listFromApi.map { apiItem ->
+                    val local = localItems[apiItem.id]
+                    // Jika lokal punya status lebih final (bukan menunggu), pakai lokal
+                    if (local != null && local.status != 1) local else apiItem
+                }
+
+                saveAntrianItemsToLocal(context, merged)
+                return@withContext merged
             }
 
             android.util.Log.w("ANTRIAN_API", "getAntrianItems: server kosong, pakai lokal")
@@ -192,7 +248,8 @@ object AntrianApiService {
 
     // ═════════════════════════════════════════════════════════════════════
     //  3. POST antrian_item.php — Ortu ambil antrian
-    //  FIX: ambil jadwal_id aktif dari DB lokal sebelum buat antrian header
+    //  FIX: nomor baru diambil dari total server (bukan lokal) untuk hindari
+    //       bentrok jika banyak user ambil antrian bersamaan.
     // ═════════════════════════════════════════════════════════════════════
     suspend fun ambilAntrian(
         context: Context,
@@ -200,11 +257,13 @@ object AntrianApiService {
         ortuId : String
     ): AntrianResponse = withContext(Dispatchers.IO) {
         try {
-            // Cek apakah sudah pernah ambil antrian hari ini
-            val aktif = getAntrianAktifHariIni(context)
+            val posyanduId = getPosyanduIdForUser(context, ortuId)
+
+            // Cek apakah sudah pernah ambil antrian hari ini untuk anak ini
+            val aktif = getAntrianAktifHariIni(context, posyanduId)
             if (aktif != null) {
                 val existing = getAntrianItems(context, aktif.id)
-                    .find { it.anakId == anakId && it.status == 1 }
+                    .find { it.anakId == anakId && it.ortuId == ortuId && it.status == 1 }
                 if (existing != null) {
                     return@withContext AntrianResponse(
                         success      = true,
@@ -216,35 +275,9 @@ object AntrianApiService {
             }
 
             val antrianId: String
-            val nomorBaru: Int
 
             if (aktif == null) {
-                // Ambil posyandu_id dari ortu (atau users sebagai fallback) untuk filter jadwal
-                val db = DatabaseHelper(context).readableDatabase
-                var posyanduId: String? = null
-                
-                val cursorOrtu = db.rawQuery(
-                    "SELECT ${DatabaseHelper.COL_ORTU_POSYANDU_ID} FROM ${DatabaseHelper.TABLE_ORTU} WHERE ${DatabaseHelper.COL_ORTU_ID} = ?",
-                    arrayOf(ortuId)
-                )
-                if (cursorOrtu.moveToFirst()) {
-                    posyanduId = cursorOrtu.getString(0)
-                }
-                cursorOrtu.close()
-                
-                if (posyanduId == null) {
-                    val cursorUsers = db.rawQuery(
-                        "SELECT ${DatabaseHelper.COL_USERS_POSYANDU_ID} FROM ${DatabaseHelper.TABLE_USERS} WHERE ${DatabaseHelper.COL_USERS_ID} = ?",
-                        arrayOf(ortuId)
-                    )
-                    if (cursorUsers.moveToFirst()) {
-                        posyanduId = cursorUsers.getString(0)
-                    }
-                    cursorUsers.close()
-                }
-                db.close()
-
-                // FIX: Ambil jadwal_id aktif hari ini dari DB lokal
+                // Belum ada antrian hari ini — buat header baru
                 val jadwalId = getJadwalAktifId(context, posyanduId)
                 if (jadwalId == null) {
                     android.util.Log.e("ANTRIAN_API", "Tidak ada jadwal aktif hari ini! posyanduId=$posyanduId")
@@ -257,7 +290,7 @@ object AntrianApiService {
                 val newId = UUID.randomUUID().toString()
                 val form  = FormBody.Builder()
                     .add("id",             newId)
-                    .add("jadwal_id",      jadwalId)   // FIX: kirim jadwal_id yang valid
+                    .add("jadwal_id",      jadwalId)
                     .add("nomor_saat_ini", "0")
                     .add("total_antrian",  "0")
                     .add("status",         "aktif")
@@ -266,7 +299,6 @@ object AntrianApiService {
                 val antrianBody = postJson(API_ANTRIAN, form)
                 android.util.Log.d("ANTRIAN_API", "Buat antrian header: $antrianBody")
 
-                // Cek apakah server berhasil buat antrian header
                 if (!isJsonOk(antrianBody)) {
                     return@withContext AntrianResponse(
                         success = false,
@@ -275,9 +307,7 @@ object AntrianApiService {
                 }
 
                 antrianId = newId
-                nomorBaru = 1
 
-                // Simpan antrian header ke lokal
                 val headerToSave = AntrianApi(
                     id           = antrianId,
                     jadwalId     = jadwalId,
@@ -289,12 +319,28 @@ object AntrianApiService {
 
             } else {
                 antrianId = aktif.id
-                nomorBaru = aktif.totalAntrian + 1
             }
 
+            // FIX: Re-fetch antrian header terbaru dari server untuk nomor yang akurat
+            // Hindari race condition jika banyak user ambil antrian bersamaan
+            val freshAntrian = try {
+                val freshBody = getJson("$API_ANTRIAN?id=$antrianId")
+                if (isJsonOk(freshBody) && freshBody.trimStart().startsWith("{")) {
+                    val j = JSONObject(freshBody)
+                    when {
+                        j.has("data") && j.optJSONObject("data") != null -> toAntrianApi(j.getJSONObject("data"))
+                        j.has("id") -> toAntrianApi(j)
+                        else -> aktif
+                    }
+                } else aktif
+            } catch (e: Exception) { aktif }
+
+            val nomorBaru = (freshAntrian?.totalAntrian ?: aktif?.totalAntrian ?: 0) + 1
+
             // POST antrian_item
+            val itemId = UUID.randomUUID().toString()
             val itemForm = FormBody.Builder()
-                .add("id",          UUID.randomUUID().toString())
+                .add("id",          itemId)
                 .add("antrian_id",  antrianId)
                 .add("anak_id",     anakId)
                 .add("ortu_id",     ortuId)
@@ -325,26 +371,25 @@ object AntrianApiService {
                 )
             }
 
+            // Update total_antrian di header
             updateTotal(antrianId, nomorBaru)
 
             val nomorFinal = try { JSONObject(itemBody).optInt("nomor", nomorBaru) }
             catch (e: Exception) { nomorBaru }
 
-            // Update header lokal dengan total terbaru
+            // Simpan header final ke lokal
             val headerFinal = AntrianApi(
                 id           = antrianId,
-                jadwalId     = aktif?.jadwalId ?: getJadwalAktifId(context) ?: "",
-                nomorSaatIni = aktif?.nomorSaatIni ?: 0,
-                totalAntrian = nomorBaru,
+                jadwalId     = freshAntrian?.jadwalId ?: aktif?.jadwalId ?: getJadwalAktifId(context, posyanduId) ?: "",
+                nomorSaatIni = freshAntrian?.nomorSaatIni ?: aktif?.nomorSaatIni ?: 0,
+                totalAntrian = nomorFinal,
                 status       = "aktif"
             )
             saveAntrianToLocal(context, headerFinal, getCurrentDate())
 
-            val itemId = try { JSONObject(itemBody).optString("id", UUID.randomUUID().toString()) }
-            catch (e: Exception) { UUID.randomUUID().toString() }
-
+            // Simpan item baru ke lokal
             val newItem = AntrianItemApi(
-                id             = itemId,
+                id             = try { JSONObject(itemBody).optString("id", itemId) } catch (e: Exception) { itemId },
                 antrianId      = antrianId,
                 anakId         = anakId,
                 ortuId         = ortuId,
@@ -371,18 +416,40 @@ object AntrianApiService {
     // ═════════════════════════════════════════════════════════════════════
     //  4. Kader: panggil antrian berikutnya (status item → 0)
     // ═════════════════════════════════════════════════════════════════════
-    suspend fun panggilAntrian(itemId: String): Boolean = withContext(Dispatchers.IO) {
+    suspend fun panggilAntrian(context: Context, item: AntrianItemApi): Boolean = withContext(Dispatchers.IO) {
         try {
+            val waktuDipanggil = getCurrentTimestamp()
             val form = FormBody.Builder()
-                .add("id",              itemId)
+                .add("id",              item.id)
+                .add("antrian_id",      item.antrianId)
+                .add("anak_id",         item.anakId)
+                .add("ortu_id",         item.ortuId)
+                .add("nomor",           item.nomor.toString())
+                .add("waktu_ambil",     item.waktuAmbil)
+                .add("waktu_dipanggil", waktuDipanggil)
                 .add("status",          "0")
-                .add("waktu_dipanggil", getCurrentTimestamp())
                 .build()
+
             val body = postJson(API_ANTRIAN_ITEM, form)
-            android.util.Log.d("ANTRIAN_API", "panggilAntrian response: ${body.take(200)}")
-            isJsonOk(body).also { ok ->
-                if (!ok) android.util.Log.e("ANTRIAN_API", "panggilAntrian gagal: ${body.take(100)}")
+            android.util.Log.d("ANTRIAN_API", "panggilAntrian response: $body")
+
+            val success = isJsonOk(body) && (
+                    body.lowercase().contains("success") ||
+                            body.lowercase().contains("true") ||
+                            body.startsWith("{")
+                    )
+
+            if (success) {
+                // Update lokal langsung agar UI sinkron tanpa tunggu server
+                val updated = item.copy(status = 0, waktuDipanggil = waktuDipanggil)
+                saveAntrianItemsToLocal(context, listOf(updated))
+
+                // Update nomor_saat_ini di header antrian
+                updateNomorSaatIni(item.antrianId, item.nomor)
+
+                return@withContext true
             }
+            return@withContext false
         } catch (e: Exception) {
             android.util.Log.e("ANTRIAN_API", "panggilAntrian error: ${e.message}", e)
             false
@@ -391,16 +458,37 @@ object AntrianApiService {
 
     // ═════════════════════════════════════════════════════════════════════
     //  5. Kader: tidak hadir (status item → 2) lalu lanjut nomor
+    //  FIX: cari item berdasarkan nomor saja (bukan status=0), karena
+    //       bisa saja item belum sempat di-update ke status 0 di lokal.
     // ═════════════════════════════════════════════════════════════════════
-    suspend fun tidakHadir(itemId: String, antrianId: String): Boolean = withContext(Dispatchers.IO) {
+    suspend fun tidakHadir(context: Context, item: AntrianItemApi): Boolean = withContext(Dispatchers.IO) {
         try {
             val form = FormBody.Builder()
-                .add("id",     itemId)
-                .add("status", "2")
+                .add("id",              item.id)
+                .add("antrian_id",      item.antrianId)
+                .add("anak_id",         item.anakId)
+                .add("ortu_id",         item.ortuId)
+                .add("nomor",           item.nomor.toString())
+                .add("waktu_ambil",     item.waktuAmbil)
+                .add("waktu_dipanggil", item.waktuDipanggil ?: getCurrentTimestamp())
+                .add("status",          "2")
                 .build()
-            postJson(API_ANTRIAN_ITEM, form)
-            lanjutAntrianBerikutnya(antrianId)
-            true
+
+            val body = postJson(API_ANTRIAN_ITEM, form)
+
+            val success = isJsonOk(body) && (
+                    body.lowercase().contains("success") ||
+                            body.lowercase().contains("true") ||
+                            body.startsWith("{")
+                    )
+
+            if (success) {
+                val updated = item.copy(status = 2)
+                saveAntrianItemsToLocal(context, listOf(updated))
+                updateNomorSaatIni(item.antrianId, item.nomor)
+                return@withContext true
+            }
+            return@withContext false
         } catch (e: Exception) {
             android.util.Log.e("ANTRIAN_API", "tidakHadir error: ${e.message}", e)
             false
@@ -421,6 +509,21 @@ object AntrianApiService {
         } catch (e: Exception) {
             android.util.Log.e("ANTRIAN_API", "lanjutAntrian error: ${e.message}", e)
             false
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    //  PRIVATE: update nomor_saat_ini di header antrian secara spesifik
+    // ─────────────────────────────────────────────────────────────────────
+    private suspend fun updateNomorSaatIni(antrianId: String, nomor: Int) = withContext(Dispatchers.IO) {
+        try {
+            val form = FormBody.Builder()
+                .add("id",             antrianId)
+                .add("nomor_saat_ini", nomor.toString())
+                .build()
+            postJson(API_ANTRIAN, form)
+        } catch (e: Exception) {
+            android.util.Log.e("ANTRIAN_API", "updateNomorSaatIni error: ${e.message}", e)
         }
     }
 
@@ -466,6 +569,8 @@ object AntrianApiService {
 
     // ═════════════════════════════════════════════════════════════════════
     //  LOCAL DB: simpan antrian_item ke SQLite lokal (upsert)
+    //  FIX: CONFLICT_REPLACE sudah benar — hanya replace jika id sama.
+    //       Tidak perlu cek manual "sudah ada atau belum".
     // ═════════════════════════════════════════════════════════════════════
     private fun saveAntrianItemsToLocal(context: Context, items: List<AntrianItemApi>) {
         if (items.isEmpty()) return
@@ -502,20 +607,39 @@ object AntrianApiService {
 
     // ═════════════════════════════════════════════════════════════════════
     //  LOCAL DB: ambil antrian aktif dari local DB (fallback offline)
+    //  FIX: jika posyanduId diberikan, filter via JOIN ke jadwal_posyandu
     // ═════════════════════════════════════════════════════════════════════
-    fun getAntrianAktifFromLocal(context: Context): AntrianApi? {
+    fun getAntrianAktifFromLocal(context: Context, posyanduId: String? = null): AntrianApi? {
         return try {
             val today  = getCurrentDate()
             val db     = DatabaseHelper(context).readableDatabase
-            val cursor = db.rawQuery(
-                "SELECT ${DatabaseHelper.COL_ANT_ID}, ${DatabaseHelper.COL_ANT_JADWAL_ID}, " +
-                        "${DatabaseHelper.COL_ANT_NOMOR_SAAT_INI}, ${DatabaseHelper.COL_ANT_TOTAL_ANTRIAN}, " +
-                        "${DatabaseHelper.COL_ANT_STATUS} " +
-                        "FROM ${DatabaseHelper.TABLE_ANTRIAN} " +
-                        "WHERE ${DatabaseHelper.COL_ANT_TANGGAL} = ? AND ${DatabaseHelper.COL_ANT_STATUS} = 'aktif' " +
-                        "LIMIT 1",
-                arrayOf(today)
-            )
+
+            val cursor = if (posyanduId != null) {
+                db.rawQuery(
+                    "SELECT a.${DatabaseHelper.COL_ANT_ID}, a.${DatabaseHelper.COL_ANT_JADWAL_ID}, " +
+                            "a.${DatabaseHelper.COL_ANT_NOMOR_SAAT_INI}, a.${DatabaseHelper.COL_ANT_TOTAL_ANTRIAN}, " +
+                            "a.${DatabaseHelper.COL_ANT_STATUS} " +
+                            "FROM ${DatabaseHelper.TABLE_ANTRIAN} a " +
+                            "JOIN ${DatabaseHelper.TABLE_JADWAL_POSYANDU} j " +
+                            "  ON a.${DatabaseHelper.COL_ANT_JADWAL_ID} = j.${DatabaseHelper.COL_JADWAL_ID} " +
+                            "WHERE a.${DatabaseHelper.COL_ANT_TANGGAL} = ? " +
+                            "  AND a.${DatabaseHelper.COL_ANT_STATUS} = 'aktif' " +
+                            "  AND j.${DatabaseHelper.COL_JADWAL_POSYANDU_ID} = ? " +
+                            "LIMIT 1",
+                    arrayOf(today, posyanduId)
+                )
+            } else {
+                db.rawQuery(
+                    "SELECT ${DatabaseHelper.COL_ANT_ID}, ${DatabaseHelper.COL_ANT_JADWAL_ID}, " +
+                            "${DatabaseHelper.COL_ANT_NOMOR_SAAT_INI}, ${DatabaseHelper.COL_ANT_TOTAL_ANTRIAN}, " +
+                            "${DatabaseHelper.COL_ANT_STATUS} " +
+                            "FROM ${DatabaseHelper.TABLE_ANTRIAN} " +
+                            "WHERE ${DatabaseHelper.COL_ANT_TANGGAL} = ? AND ${DatabaseHelper.COL_ANT_STATUS} = 'aktif' " +
+                            "LIMIT 1",
+                    arrayOf(today)
+                )
+            }
+
             val result = if (cursor.moveToFirst()) {
                 AntrianApi(
                     id           = cursor.getString(0),

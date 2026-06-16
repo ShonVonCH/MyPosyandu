@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -77,80 +78,92 @@ fun AntrianOrtuScreen(
 
         isLoading    = true
         errorMessage = ""
-        namaOrtu     = ""
-        posyanduInfo = ""
-        anakList     = emptyList()
 
         try {
             val db = DatabaseHelper(context).readableDatabase
 
             // Nama ortu
-            val cursorOrtu = db.rawQuery(
-                "SELECT ${DatabaseHelper.COL_ORTU_NAMA}, ${DatabaseHelper.COL_ORTU_POSYANDU_ID} " +
-                        "FROM ${DatabaseHelper.TABLE_ORTU} " +
+            if (namaOrtu.isBlank()) {
+                val cursorOrtu = db.rawQuery(
+                    "SELECT ${DatabaseHelper.COL_ORTU_NAMA}, ${DatabaseHelper.COL_ORTU_POSYANDU_ID} " +
+                            "FROM ${DatabaseHelper.TABLE_ORTU} " +
+                            "WHERE ${DatabaseHelper.COL_ORTU_ID} = ?",
+                    arrayOf(userId)
+                )
+                if (cursorOrtu.moveToFirst()) {
+                    namaOrtu = cursorOrtu.getString(0) ?: ""
+                } else {
+                    val cursorUsers = db.rawQuery(
+                        "SELECT ${DatabaseHelper.COL_USERS_NAMA} " +
+                                "FROM ${DatabaseHelper.TABLE_USERS} " +
+                                "WHERE ${DatabaseHelper.COL_USERS_ID} = ?",
+                        arrayOf(userId)
+                    )
+                    if (cursorUsers.moveToFirst()) namaOrtu = cursorUsers.getString(0) ?: ""
+                    cursorUsers.close()
+                }
+                cursorOrtu.close()
+            }
+
+            // Posyandu info (load sekali saja)
+            if (posyanduInfo.isBlank()) {
+                val cursorPosyandu = db.rawQuery(
+                    "SELECT p.${DatabaseHelper.COL_POSYANDU_NAMA}, p.${DatabaseHelper.COL_POSYANDU_KELURAHAN}, " +
+                            "p.${DatabaseHelper.COL_POSYANDU_RW}, p.${DatabaseHelper.COL_POSYANDU_ALAMAT} " +
+                            "FROM ${DatabaseHelper.TABLE_POSYANDU} p " +
+                            "JOIN ${DatabaseHelper.TABLE_ORTU} o ON p.${DatabaseHelper.COL_POSYANDU_ID} = o.${DatabaseHelper.COL_ORTU_POSYANDU_ID} " +
+                            "WHERE o.${DatabaseHelper.COL_ORTU_ID} = ? LIMIT 1",
+                    arrayOf(userId)
+                )
+                if (cursorPosyandu.moveToFirst()) {
+                    val namaPos = cursorPosyandu.getString(0) ?: "Posyandu"
+                    val kel     = cursorPosyandu.getString(1) ?: ""
+                    val rw      = cursorPosyandu.getString(2) ?: ""
+                    val alm     = cursorPosyandu.getString(3) ?: ""
+                    posyanduInfo = buildString {
+                        append(namaPos)
+                        if (kel.isNotBlank()) append(", Kel. $kel")
+                        if (rw.isNotBlank()) append(", RW-$rw")
+                        if (alm.isNotBlank()) append(" - $alm")
+                    }
+                }
+                cursorPosyandu.close()
+            }
+
+            // Ambil posyandu_id ortu untuk filter antrian
+            var posyanduId: String? = null
+            val cursorPosId = db.rawQuery(
+                "SELECT ${DatabaseHelper.COL_ORTU_POSYANDU_ID} FROM ${DatabaseHelper.TABLE_ORTU} " +
                         "WHERE ${DatabaseHelper.COL_ORTU_ID} = ?",
                 arrayOf(userId)
             )
-            if (cursorOrtu.moveToFirst()) {
-                namaOrtu = cursorOrtu.getString(0) ?: ""
-            } else {
-                val cursorUsers = db.rawQuery(
-                    "SELECT ${DatabaseHelper.COL_USERS_NAMA} " +
-                            "FROM ${DatabaseHelper.TABLE_USERS} " +
-                            "WHERE ${DatabaseHelper.COL_USERS_ID} = ?",
-                    arrayOf(userId)
-                )
-                if (cursorUsers.moveToFirst()) namaOrtu = cursorUsers.getString(0) ?: ""
-                cursorUsers.close()
-            }
-            cursorOrtu.close()
+            if (cursorPosId.moveToFirst()) posyanduId = cursorPosId.getString(0)
+            cursorPosId.close()
 
-            // Posyandu info
-            val cursorPosyandu = db.rawQuery(
-                "SELECT p.${DatabaseHelper.COL_POSYANDU_NAMA}, p.${DatabaseHelper.COL_POSYANDU_KELURAHAN}, " +
-                        "p.${DatabaseHelper.COL_POSYANDU_RW}, p.${DatabaseHelper.COL_POSYANDU_ALAMAT} " +
-                        "FROM ${DatabaseHelper.TABLE_POSYANDU} p " +
-                        "JOIN ${DatabaseHelper.TABLE_ORTU} o ON p.${DatabaseHelper.COL_POSYANDU_ID} = o.${DatabaseHelper.COL_ORTU_POSYANDU_ID} " +
-                        "WHERE o.${DatabaseHelper.COL_ORTU_ID} = ? LIMIT 1",
-                arrayOf(userId)
-            )
-            if (cursorPosyandu.moveToFirst()) {
-                val namaPos = cursorPosyandu.getString(0) ?: "Posyandu"
-                val kel     = cursorPosyandu.getString(1) ?: ""
-                val rw      = cursorPosyandu.getString(2) ?: ""
-                val alm     = cursorPosyandu.getString(3) ?: ""
-                posyanduInfo = buildString {
-                    append(namaPos)
-                    if (kel.isNotBlank()) append(", Kel. $kel")
-                    if (rw.isNotBlank()) append(", RW-$rw")
-                    if (alm.isNotBlank()) append(" - $alm")
-                }
-            }
-            cursorPosyandu.close()
-
-            // Antrian aktif dari API
-            val antrianAktif        = AntrianApiService.getAntrianAktifHariIni(context)
+            // Antrian aktif dari API (filter per posyandu)
+            val antrianAktif = AntrianApiService.getAntrianAktifHariIni(context, posyanduId)
             val antrianItemsHariIni = if (antrianAktif != null)
                 AntrianApiService.getAntrianItems(context, antrianAktif.id)
             else emptyList()
 
-            // Map anak_id → item (hanya milik userId, status 1 = menunggu)
-            val itemByAnak = antrianItemsHariIni
+            // FIX: Map anak_id → item milik userId yang masih menunggu (status=1)
+            // Jika status sudah 0 (dipanggil) atau 2 (tidak hadir), anggap sudah selesai → reset ke "Ambil antrian"
+            val itemMenungguByAnak = antrianItemsHariIni
                 .filter { it.ortuId == userId && it.status == 1 }
                 .associateBy { it.anakId }
 
-            // Fallback lokal jika API tidak return antrian aktif
+            // Fallback lokal: cek antrian_item dari local DB
             val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
             fun getNomorLokal(anakId: String): Int? = try {
                 val cur = db.rawQuery(
-                    "SELECT ai.${DatabaseHelper.COL_ANTITEM_NOMOR} " +
+                    "SELECT ai.${DatabaseHelper.COL_ANTITEM_NOMOR}, ai.${DatabaseHelper.COL_ANTITEM_STATUS} " +
                             "FROM ${DatabaseHelper.TABLE_ANTRIAN_ITEM} ai " +
                             "JOIN ${DatabaseHelper.TABLE_ANTRIAN} a " +
                             "  ON ai.${DatabaseHelper.COL_ANTITEM_ANTRIAN_ID} = a.${DatabaseHelper.COL_ANT_ID} " +
                             "WHERE a.${DatabaseHelper.COL_ANT_TANGGAL} = ? " +
                             "  AND ai.${DatabaseHelper.COL_ANTITEM_ANAK_ID} = ? " +
                             "  AND ai.${DatabaseHelper.COL_ANTITEM_ORTU_ID} = ? " +
-                            "  AND ai.${DatabaseHelper.COL_ANTITEM_STATUS} = 1 " +
+                            "  AND ai.${DatabaseHelper.COL_ANTITEM_STATUS} = 1 " +  // FIX: hanya status menunggu
                             "LIMIT 1",
                     arrayOf(today, anakId, userId)
                 )
@@ -176,8 +189,12 @@ fun AntrianOrtuScreen(
                 val tglLahir = cursorAnak.getString(2) ?: ""
                 val umur     = hitungUmurBulanAntrian(tglLahir)
 
-                val itemApi    = itemByAnak[id]
+                // Cek antrian dari API dulu, fallback ke lokal
+                val itemApi    = itemMenungguByAnak[id]
                 val nomor      = itemApi?.nomor ?: getNomorLokal(id)
+
+                // FIX: sudahAmbil hanya true jika masih menunggu (status=1)
+                // Jika dipanggil/tidak hadir, balik ke tampilan "Ambil antrian"
                 val sudahAmbil = nomor != null
                 val nomorStr   = nomor?.toString()?.padStart(3, '0')
 
@@ -207,6 +224,22 @@ fun AntrianOrtuScreen(
         loadData()
     }
 
+    // ── FIX: Polling otomatis setiap 10 detik untuk sync status dari kader ─
+    // Ini yang membuat UI ortu berubah otomatis saat kader panggil/tidak hadir
+    LaunchedEffect(userId) {
+        while (true) {
+            delay(10_000L)  // 10 detik
+            // Hanya refresh jika ada anak yang masih menunggu
+            if (anakList.any { it.sudahAmbilAntrian }) {
+                try {
+                    loadData()
+                } catch (e: Exception) {
+                    android.util.Log.e("ANTRIAN_ORTU", "Polling error: ${e.message}")
+                }
+            }
+        }
+    }
+
     // ── Logout Dialog ───────────────────────────────────────────────────────
     if (showLogoutDialog) {
         AlertDialog(
@@ -221,7 +254,6 @@ fun AntrianOrtuScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showLogoutDialog = false
-                    // FIX: matikan foreign key dulu sebelum delete
                     try {
                         val db = DatabaseHelper(context).writableDatabase
                         db.execSQL("PRAGMA foreign_keys = OFF")
@@ -318,7 +350,7 @@ fun AntrianOrtuScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 when {
-                    isLoading -> {
+                    isLoading && anakList.isEmpty() -> {
                         Box(
                             modifier         = Modifier.fillMaxWidth().padding(vertical = 32.dp),
                             contentAlignment = Alignment.Center
@@ -380,6 +412,24 @@ fun AntrianOrtuScreen(
                         fontSize = 13.sp
                     )
                 }
+            }
+
+            // FIX: Tombol refresh manual agar ortu bisa sync status kapan saja
+            TextButton(
+                onClick  = { scope.launch { loadData() } },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        color       = AntTextGrey,
+                        modifier    = Modifier.size(14.dp),
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text("↻  Perbarui Status", color = AntTextGrey, fontSize = 13.sp)
             }
 
             Spacer(modifier = Modifier.height(32.dp))
