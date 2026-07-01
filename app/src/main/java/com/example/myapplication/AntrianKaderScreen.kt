@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.AlertDialog
 import androidx.compose.material.TextButton
 import androidx.compose.material.icons.automirrored.outlined.Assignment
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.ConfirmationNumber
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.PowerSettingsNew
@@ -346,7 +347,8 @@ fun AntrianKaderScreen(
         ) {
             KaderHeader(
                 posyanduNama = posyanduNama.ifBlank { "Posyandu" },
-                jadwalInfo   = jadwalInfo.ifBlank { getCurrentDate() }
+                jadwalInfo   = jadwalInfo.ifBlank { getCurrentDate() },
+                onBack       = onNavigateBack
             )
 
             CardDipanggil(nomor = nomorDipanggil)
@@ -511,32 +513,52 @@ private fun hitungUmurKader(tanggalLahir: String): String {
 // ════════════════════════════════════════════════════════════
 
 @Composable
-private fun KaderHeader(posyanduNama: String, jadwalInfo: String) {
-    Column(
+private fun KaderHeader(posyanduNama: String, jadwalInfo: String, onBack: () -> Unit) {
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .background(KaderHeaderGreen)
-            .padding(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 20.dp)
+            .statusBarsPadding()
+            .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 24.dp)
     ) {
-        Text(
-            text       = "MyPosyandu",
-            color      = KaderTextWhite,
-            fontSize   = 16.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign  = TextAlign.Center,
-            modifier   = Modifier.fillMaxWidth().padding(bottom = 16.dp)
-        )
-        Text(
-            text       = "Antrian $posyanduNama",
-            color      = KaderTextWhite,
-            fontSize   = 20.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text     = jadwalInfo,
-            color    = KaderTextWhite.copy(alpha = 0.8f),
-            fontSize = 14.sp
-        )
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier          = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector        = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Kembali",
+                    tint               = Color.White,
+                    modifier           = Modifier
+                        .size(24.dp)
+                        .clickable { onBack() }
+                )
+                Text(
+                    text       = "MyPosyandu",
+                    color      = KaderTextWhite,
+                    fontSize   = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign  = TextAlign.Center,
+                    modifier   = Modifier.weight(1f)
+                )
+                Spacer(modifier = Modifier.width(24.dp))
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(
+                text       = "Antrian $posyanduNama",
+                color      = KaderTextWhite,
+                fontSize   = 26.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text     = jadwalInfo,
+                color    = KaderTextWhite.copy(alpha = 0.8f),
+                fontSize = 14.sp
+            )
+        }
     }
 }
 

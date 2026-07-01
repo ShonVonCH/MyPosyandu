@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -42,57 +43,67 @@ fun DetailAnakScreen(onNavigateBack: () -> Unit = {}) {
 
 @Composable
 fun DetailAnakHeader(onBack: () -> Unit) {
-    val headerColor = Color(0xFF2E9E7B) // Hijau Tosca Emerald
+    val headerColor = HeaderGreen // Disamakan dengan HeaderGreen agar konsisten
     val avatarColor = Color(0xFF98E6C8) // Mint Muda
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .background(headerColor)
-            .padding(top = 48.dp, start = 24.dp, end = 24.dp, bottom = 24.dp)
+            .statusBarsPadding()
+            .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 24.dp)
     ) {
-        Box(
-            modifier = Modifier
-                .border(1.dp, Color.White, RoundedCornerShape(8.dp))
-                .clickable { onBack() }
-                .padding(horizontal = 12.dp, vertical = 6.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier          = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Icon(
-                    imageVector = Icons.Default.ArrowBack,
-                    contentDescription = "Back",
-                    tint = Color.White,
-                    modifier = Modifier.size(18.dp)
+                    imageVector        = Icons.Default.ArrowBack,
+                    contentDescription = "Kembali",
+                    tint               = Color.White,
+                    modifier           = Modifier
+                        .size(24.dp)
+                        .clickable { onBack() }
                 )
+                Text(
+                    text       = "MyPosyandu",
+                    color      = Color.White,
+                    fontSize   = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier   = Modifier.weight(1f),
+                    textAlign  = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.width(24.dp))
             }
-        }
 
-        Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-        // Info Profil Anak
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            // Foto/Avatar Lingkaran
-            Box(
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(CircleShape)
-                    .background(avatarColor)
-            )
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column {
-                Text(
-                    text = "Michael Kwok",
-                    color = Color.White,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold
+            // Info Profil Anak
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Foto/Avatar Lingkaran
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(CircleShape)
+                        .background(avatarColor)
                 )
-                Text(
-                    text = "36 Bulan ~ Laki-Laki",
-                    color = Color(0xCCFFFFFF), // Putih transparan
-                    fontSize = 14.sp
-                )
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Column {
+                    Text(
+                        text = "Michael Kwok",
+                        color = Color.White,
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "36 Bulan ~ Laki-Laki",
+                        color = Color(0xCCFFFFFF), // Putih transparan
+                        fontSize = 14.sp
+                    )
+                }
             }
         }
     }

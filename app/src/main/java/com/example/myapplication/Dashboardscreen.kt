@@ -14,6 +14,8 @@ import androidx.compose.material.LinearProgressIndicator
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.AlertDialog
 import androidx.compose.material.TextButton
 import androidx.compose.material.icons.automirrored.outlined.Assignment
@@ -324,7 +326,7 @@ fun ScheduleCard(
                     .background(CircleMint)
             )
             Spacer(modifier = Modifier.width(16.dp))
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text       = if (jadwal != null) "Jadwal Posyandu berikutnya" else "Jadwal Posyandu",
                     color      = TextGreenLight,
@@ -348,6 +350,12 @@ fun ScheduleCard(
                     )
                 }
             }
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = "Kelola",
+                tint = TextGreenLight,
+                modifier = Modifier.size(24.dp)
+            )
         }
     }
 }

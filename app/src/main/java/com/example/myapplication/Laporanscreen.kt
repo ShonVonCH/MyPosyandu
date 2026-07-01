@@ -181,11 +181,10 @@ fun LaporanScreen(
     val displayFmt     = SimpleDateFormat("MMMM yyyy", Locale("id", "ID"))
 
     var rawDari by remember {
-        mutableStateOf(Calendar.getInstance().apply { set(2025, Calendar.JANUARY, 1) })
+        mutableStateOf(Calendar.getInstance())
     }
     var rawSampai by remember {
         mutableStateOf(Calendar.getInstance().apply {
-            set(2025, Calendar.JANUARY, 1)
             add(Calendar.MONTH, 3)
         })
     }
@@ -306,23 +305,36 @@ fun LaporanScreen(
                     .fillMaxWidth()
                     .background(HeaderGreen)
                     .statusBarsPadding()
-                    .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 20.dp)
+                    .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 24.dp)
             ) {
-                Column {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color.White.copy(alpha = 0.15f))
-                            .clickable { onNavigateBack() }
-                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier          = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.ArrowBack, "Kembali", tint = LaporanWhite, modifier = Modifier.size(16.dp))
-                        }
+                        Icon(
+                            imageVector        = Icons.Default.ArrowBack,
+                            contentDescription = "Kembali",
+                            tint               = Color.White,
+                            modifier           = Modifier
+                                .size(24.dp)
+                                .clickable { onNavigateBack() }
+                        )
+                        Text(
+                            text       = "MyPosyandu",
+                            color      = Color.White,
+                            fontSize   = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier   = Modifier.weight(1f),
+                            textAlign  = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.width(24.dp))
                     }
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("Export Laporan", color = LaporanWhite, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                    Text("Unduh dan kirim data laporan", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Text("Export Laporan", color = LaporanWhite, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text("Unduh dan kirim data laporan", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
                 }
             }
 

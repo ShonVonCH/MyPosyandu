@@ -538,22 +538,36 @@ fun ImunisasiHeader(
             .fillMaxWidth()
             .background(HeaderGreen)
             .statusBarsPadding()
-            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 20.dp)
+            .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 24.dp)
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(modifier = Modifier.fillMaxWidth()) {
             Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .border(1.dp, TextWhite, RoundedCornerShape(8.dp))
-                    .clickable(onClick = onNavigateBack)
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
-                verticalAlignment     = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
+                modifier          = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Filled.ArrowBack, "Kembali", tint = TextWhite, modifier = Modifier.size(16.dp))
+                Icon(
+                    imageVector        = Icons.Default.ArrowBack,
+                    contentDescription = "Kembali",
+                    tint               = TextWhite,
+                    modifier           = Modifier
+                        .size(24.dp)
+                        .clickable { onNavigateBack() }
+                )
+                Text(
+                    text       = "MyPosyandu",
+                    color      = TextWhite,
+                    fontSize   = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier   = Modifier.weight(1f),
+                    textAlign  = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                Spacer(modifier = Modifier.width(24.dp))
             }
-            Text(text = "Imunisasi", color = TextWhite, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-            Text(text = "$namaAnak ~ $umurBulan Bulan", color = TextWhite.copy(alpha = 0.75f), fontSize = 13.sp)
+
+            Spacer(modifier = Modifier.height(20.dp))
+            Text(text = "Imunisasi", color = TextWhite, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(text = "$namaAnak ~ $umurBulan Bulan", color = TextWhite.copy(alpha = 0.75f), fontSize = 14.sp)
             if (namaOrtu.isNotBlank()) {
                 Text(text = "Ortu: $namaOrtu", color = TextWhite.copy(alpha = 0.6f), fontSize = 12.sp)
             }

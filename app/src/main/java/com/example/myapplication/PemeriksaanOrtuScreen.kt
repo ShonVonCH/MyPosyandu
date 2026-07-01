@@ -22,6 +22,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.statusBarsPadding
 
 private val PemHeaderBlue        = Color(0xFF1964A3)
 private val PemActiveTabGreen    = Color(0xFF14634B)
@@ -93,50 +94,55 @@ private fun PemHeaderProfile(
     usiaGender   : String,
     onBackClicked: () -> Unit
 ) {
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .background(PemHeaderBlue)
-            .padding(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 24.dp)
+            .statusBarsPadding()
+            .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 24.dp)
     ) {
-        Text(
-            text       = "MyPosyandu",
-            color      = TextWhite,
-            fontSize   = 16.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign  = TextAlign.Center,
-            modifier   = Modifier.fillMaxWidth().padding(bottom = 16.dp)
-        )
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier          = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector        = Icons.Default.ArrowBack,
+                    contentDescription = "Kembali",
+                    tint               = Color.White,
+                    modifier           = Modifier
+                        .size(24.dp)
+                        .clickable { onBackClicked() }
+                )
+                Text(
+                    text       = "MyPosyandu",
+                    color      = Color.White,
+                    fontSize   = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier   = Modifier.weight(1f),
+                    textAlign  = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.width(24.dp))
+            }
 
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(6.dp))
-                .border(1.dp, TextWhite.copy(alpha = 0.8f), RoundedCornerShape(6.dp))
-                .clickable(onClick = onBackClicked)
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment     = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = TextWhite, modifier = Modifier.size(18.dp))
-        }
+            Spacer(modifier = Modifier.height(24.dp))
 
-        Spacer(modifier = Modifier.height(20.dp))
-
-        Row(
-            modifier              = Modifier.fillMaxWidth(),
-            verticalAlignment     = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(CircleShape)
-                    .border(2.dp, TextWhite, CircleShape)
-                    .background(PemHeaderBlue)
-            )
-            Column {
-                Text(namaAnak,   color = TextWhite,                    fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                Text(usiaGender, color = TextWhite.copy(alpha = 0.8f), fontSize = 14.sp)
+            Row(
+                modifier              = Modifier.fillMaxWidth(),
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .border(2.dp, Color.White, CircleShape)
+                        .background(PemHeaderBlue)
+                )
+                Column {
+                    Text(namaAnak,   color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                    Text(usiaGender, color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
+                }
             }
         }
     }

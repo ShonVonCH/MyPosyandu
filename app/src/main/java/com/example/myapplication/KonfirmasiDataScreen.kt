@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -268,22 +269,34 @@ fun KonfirmasiHeader(onNavigateBack: () -> Unit) {
             .fillMaxWidth()
             .background(HeaderGreen)
             .statusBarsPadding()
-            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 28.dp)
+            .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 24.dp)
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(modifier = Modifier.fillMaxWidth()) {
             Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .border(1.dp, TextWhite, RoundedCornerShape(8.dp))
-                    .clickable(onClick = onNavigateBack)
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment     = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
+                modifier          = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Filled.ArrowBack, "Kembali", tint = TextWhite,
-                    modifier = Modifier.size(16.dp))
+                Icon(
+                    imageVector        = Icons.Default.ArrowBack,
+                    contentDescription = "Kembali",
+                    tint               = TextWhite,
+                    modifier           = Modifier
+                        .size(24.dp)
+                        .clickable { onNavigateBack() }
+                )
+                Text(
+                    text       = "MyPosyandu",
+                    color      = TextWhite,
+                    fontSize   = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier   = Modifier.weight(1f),
+                    textAlign  = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.width(24.dp))
             }
-            Text("Konfirmasi Data", color = TextWhite, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+
+            Spacer(modifier = Modifier.height(20.dp))
+            Text(text = "Konfirmasi Data", color = TextWhite, fontSize = 26.sp, fontWeight = FontWeight.Bold)
         }
     }
 }

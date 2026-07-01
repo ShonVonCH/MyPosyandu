@@ -340,6 +340,14 @@ fun AppNavigation() {
                 onNavigateToTicket = { safeNavigate { navController.navigate("antrian_ortu") { launchSingleTop = true } } },
                 onNavigateToFood   = { safeNavigate { navController.navigate("menu_sehat") { launchSingleTop = true } } },
                 onNavigateToProfile= { },
+                onNavigateToLogout = {
+                    formViewModel.loggedInOrangTuaUsername = ""
+                    formViewModel.loggedInOrangTuaId       = ""
+                    navController.navigate("login") {
+                        popUpTo(navController.graph.id) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                },
                 onNavigateToDetail = { menuId ->
                     safeNavigate { navController.navigate("menu_detail/$menuId") { launchSingleTop = true } }
                 }
@@ -358,7 +366,15 @@ fun AppNavigation() {
                 onNavigateToHome   = { safeNavigate { navController.navigate("dashboard_orangtua/${formViewModel.loggedInOrangTuaUsername}") { launchSingleTop = true } } },
                 onNavigateToTicket = { safeNavigate { navController.navigate("antrian_ortu") { launchSingleTop = true } } },
                 onNavigateToFood   = { safeNavigate { navController.navigate("menu_sehat") { launchSingleTop = true } } },
-                onNavigateToProfile= { }
+                onNavigateToProfile= { },
+                onNavigateToLogout = {
+                    formViewModel.loggedInOrangTuaUsername = ""
+                    formViewModel.loggedInOrangTuaId       = ""
+                    navController.navigate("login") {
+                        popUpTo(navController.graph.id) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                }
             )
         }
 

@@ -44,19 +44,6 @@ fun JadwalPosyanduScreen(
 
     Scaffold(
         scaffoldState = scaffoldState,
-        topBar = {
-            TopAppBar(
-                modifier = Modifier.statusBarsPadding(),
-                title = { Text("Jadwal Posyandu", color = Color.White) },
-                backgroundColor = HeaderGreen,
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
-                    }
-                },
-                elevation = 0.dp
-            )
-        },
         backgroundColor = BackgroundDark,
         floatingActionButton = {
             FloatingActionButton(
@@ -69,19 +56,60 @@ fun JadwalPosyanduScreen(
             }
         }
     ) { innerPadding ->
-        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-            if (jadwalList.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Belum ada jadwal", color = TextGrey)
+        Column(
+            modifier = Modifier.fillMaxSize().padding(innerPadding)
+        ) {
+            // Header
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(HeaderGreen)
+                    .statusBarsPadding()
+                    .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 24.dp)
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier          = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector        = Icons.Default.ArrowBack,
+                            contentDescription = "Kembali",
+                            tint               = Color.White,
+                            modifier           = Modifier
+                                .size(24.dp)
+                                .clickable { onNavigateBack() }
+                        )
+                        Text(
+                            text       = "MyPosyandu",
+                            color      = Color.White,
+                            fontSize   = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier   = Modifier.weight(1f),
+                            textAlign  = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.width(24.dp))
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Text(text = "Jadwal Posyandu", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
                 }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(jadwalList) { jadwal ->
-                        JadwalItem(jadwal)
+            }
+
+            Box(modifier = Modifier.fillMaxSize().weight(1f)) {
+                if (jadwalList.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Belum ada jadwal", color = TextGrey)
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(jadwalList) { jadwal ->
+                            JadwalItem(jadwal)
+                        }
                     }
                 }
             }

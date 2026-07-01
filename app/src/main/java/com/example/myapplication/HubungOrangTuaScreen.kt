@@ -40,7 +40,6 @@ private val HOConfirmInfoBoxBg = Color(0xFF8FDDBC)
 private val HOConfirmTextDark  = Color(0xFF1E6B4E)
 private val HORadioActive      = Color(0xFF2E9B6E)
 private val HOSubtext          = Color(0xFFAAAAAA)
-private val HOPageLabel        = Color(0xFF666666)
 
 @Composable
 fun HubungOrangTuaScreen(
@@ -93,13 +92,6 @@ fun HubungOrangTuaScreen(
             .navigationBarsPadding()
             .verticalScroll(rememberScrollState())
     ) {
-        Text(
-            text     = "Hubungkan Ke Ortu",
-            color    = HOPageLabel,
-            fontSize = 11.sp,
-            modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp)
-        )
-
         HubungHeader(onNavigateBack = onNavigateBack)
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -191,24 +183,36 @@ fun HubungHeader(onNavigateBack: () -> Unit) {
             .fillMaxWidth()
             .background(HeaderGreen)
             .statusBarsPadding()
-            .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 24.dp)
+            .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 24.dp)
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(modifier = Modifier.fillMaxWidth()) {
             Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .border(1.dp, TextWhite, RoundedCornerShape(8.dp))
-                    .clickable(onClick = onNavigateBack)
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
-                verticalAlignment     = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
+                modifier          = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Filled.ArrowBack, contentDescription = "Kembali",
-                    tint = TextWhite, modifier = Modifier.size(16.dp))
+                Icon(
+                    imageVector        = Icons.Default.ArrowBack,
+                    contentDescription = "Kembali",
+                    tint               = TextWhite,
+                    modifier           = Modifier
+                        .size(24.dp)
+                        .clickable { onNavigateBack() }
+                )
+                Text(
+                    text       = "MyPosyandu",
+                    color      = TextWhite,
+                    fontSize   = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier   = Modifier.weight(1f),
+                    textAlign  = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.width(24.dp))
             }
+
+            Spacer(modifier = Modifier.height(20.dp))
             Text(
                 text = "Hubungkan Ke Akun Orang Tua",
-                color = TextWhite, fontSize = 20.sp, fontWeight = FontWeight.Bold
+                color = TextWhite, fontSize = 26.sp, fontWeight = FontWeight.Bold
             )
         }
     }

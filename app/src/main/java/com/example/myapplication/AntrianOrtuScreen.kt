@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.ConfirmationNumber
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.PowerSettingsNew
@@ -52,6 +53,7 @@ data class AnakAntrianData(
 @Composable
 fun AntrianOrtuScreen(
     userId             : String    = "",
+    onNavigateBack     : () -> Unit = {},
     onNavigateToHome   : () -> Unit = {},
     onNavigateToTicket : () -> Unit = {},
     onNavigateToFood   : () -> Unit = {},
@@ -321,7 +323,8 @@ fun AntrianOrtuScreen(
         ) {
             HeaderAntrianOrtu(
                 namaOrtu     = namaOrtu,
-                posyanduInfo = posyanduInfo
+                posyanduInfo = posyanduInfo,
+                onBack       = onNavigateBack
             )
 
             Text(
@@ -500,24 +503,45 @@ private fun BottomNavBarAntrian(
 }
 
 @Composable
-private fun HeaderAntrianOrtu(namaOrtu: String = "", posyanduInfo: String = "") {
-    Column(
+private fun HeaderAntrianOrtu(namaOrtu: String = "", posyanduInfo: String = "", onBack: () -> Unit = {}) {
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .background(AntHeaderBlue)
-            .padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 24.dp)
+            .statusBarsPadding()
+            .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 24.dp)
     ) {
-        Text(
-            text       = "MyPosyandu",
-            color      = AntTextWhite,
-            fontSize   = 16.sp,
-            fontWeight = FontWeight.Bold,
-            modifier   = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 24.dp)
-        )
-        Column {
-            Text("Selamat datang,", color = AntTextWhite.copy(alpha = 0.8f), fontSize = 14.sp)
-            Text(namaOrtu.ifBlank { "Orang Tua" }, color = AntTextWhite, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            Text(posyanduInfo.ifBlank { "Posyandu" }, color = AntTextWhite.copy(alpha = 0.8f), fontSize = 14.sp)
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier          = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector        = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Kembali",
+                    tint               = Color.White,
+                    modifier           = Modifier
+                        .size(24.dp)
+                        .clickable { onBack() }
+                )
+                Text(
+                    text       = "MyPosyandu",
+                    color      = AntTextWhite,
+                    fontSize   = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier   = Modifier.weight(1f),
+                    textAlign  = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                Spacer(modifier = Modifier.width(24.dp))
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Column {
+                Text("Selamat datang,", color = AntTextWhite.copy(alpha = 0.8f), fontSize = 14.sp)
+                Text(namaOrtu.ifBlank { "Orang Tua" }, color = AntTextWhite, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                Text(posyanduInfo.ifBlank { "Posyandu" }, color = AntTextWhite.copy(alpha = 0.8f), fontSize = 14.sp)
+            }
         }
     }
 }

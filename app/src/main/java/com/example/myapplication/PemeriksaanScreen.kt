@@ -986,22 +986,36 @@ fun HeaderProfilAnak(
             .fillMaxWidth()
             .background(HeaderGreen)
             .statusBarsPadding()
-            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 20.dp)
+            .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 24.dp)
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(modifier = Modifier.fillMaxWidth()) {
             Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .border(1.dp, TextWhite, RoundedCornerShape(8.dp))
-                    .clickable(onClick = onNavigateBack)
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
-                verticalAlignment     = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
+                modifier          = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Filled.ArrowBack, "Kembali", tint = TextWhite, modifier = Modifier.size(16.dp))
+                Icon(
+                    imageVector        = Icons.Default.ArrowBack,
+                    contentDescription = "Kembali",
+                    tint               = TextWhite,
+                    modifier           = Modifier
+                        .size(24.dp)
+                        .clickable { onNavigateBack() }
+                )
+                Text(
+                    text       = "MyPosyandu",
+                    color      = TextWhite,
+                    fontSize   = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier   = Modifier.weight(1f),
+                    textAlign  = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.width(24.dp))
             }
-            Text(text = halamanJudul, color = TextWhite, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-            Text(text = subTitle, color = TextWhite.copy(alpha = 0.75f), fontSize = 12.sp)
+
+            Spacer(modifier = Modifier.height(20.dp))
+            Text(text = halamanJudul, color = TextWhite, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(text = subTitle, color = TextWhite.copy(alpha = 0.75f), fontSize = 14.sp)
         }
     }
 }

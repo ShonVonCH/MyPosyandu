@@ -36,6 +36,7 @@ fun MenuKategoriScreen(
     onNavigateToTicket: () -> Unit = {},
     onNavigateToFood  : () -> Unit = {},
     onNavigateToProfile: () -> Unit = {},
+    onNavigateToLogout : () -> Unit = {},
     onNavigateToDetail : (String) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -46,6 +47,38 @@ fun MenuKategoriScreen(
     var selectedKatId by remember { mutableStateOf(kategoriId) }
     var menuList      by remember { mutableStateOf<List<MenuSehat>>(emptyList()) }
     var isLoading     by remember { mutableStateOf(true) }
+    var showLogoutDialog by remember { mutableStateOf(false) }
+
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            backgroundColor = Color(0xFF2A2A2A),
+            title = {
+                Text("Logout", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            },
+            text = {
+                Text("Yakin ingin keluar dari akun?", color = Color(0xFF888888), fontSize = 14.sp)
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showLogoutDialog = false
+                    try {
+                        val db = DatabaseHelper(context).writableDatabase
+                        db.execSQL("DELETE FROM ${DatabaseHelper.TABLE_USERS}")
+                        db.close()
+                    } catch (e: Exception) { }
+                    onNavigateToLogout()
+                }) {
+                    Text("Logout", color = Color(0xFFE74C3C), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) {
+                    Text("Batal", color = Color(0xFF888888))
+                }
+            }
+        )
+    }
 
     fun loadMenu(katId: String) {
         scope.launch {
@@ -100,7 +133,7 @@ fun MenuKategoriScreen(
                 onHomeClick    = onNavigateToHome,
                 onTicketClick  = onNavigateToTicket,
                 onFoodClick    = onNavigateToFood,
-                onProfileClick = onNavigateToProfile
+                onProfileClick = { showLogoutDialog = true }
             )
         }
     ) { padding ->

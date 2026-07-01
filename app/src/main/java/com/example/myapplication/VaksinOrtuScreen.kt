@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -186,57 +187,55 @@ private fun VaksinOrtuHeader(
     usiaGender: String,
     onBackClicked: () -> Unit
 ) {
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .background(VakHeaderBlue)
-            .padding(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 24.dp)
+            .statusBarsPadding()
+            .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 24.dp)
     ) {
-        Text(
-            text       = "MyPosyandu",
-            color      = VakTextWhite,
-            fontSize   = 16.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign  = TextAlign.Center,
-            modifier   = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp)
-        )
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier          = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector        = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Kembali",
+                    tint               = Color.White,
+                    modifier           = Modifier
+                        .size(24.dp)
+                        .clickable { onBackClicked() }
+                )
+                Text(
+                    text       = "MyPosyandu",
+                    color      = Color.White,
+                    fontSize   = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier   = Modifier.weight(1f),
+                    textAlign  = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.width(24.dp))
+            }
 
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(6.dp))
-                .border(1.dp, VakTextWhite.copy(alpha = 0.8f), RoundedCornerShape(6.dp))
-                .clickable(onClick = onBackClicked)
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment    = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Icon(
-                Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Back",
-                tint     = VakTextWhite,
-                modifier = Modifier.size(18.dp)
-            )
-        }
+            Spacer(modifier = Modifier.height(24.dp))
 
-        Spacer(modifier = Modifier.height(20.dp))
-
-        Row(
-            modifier              = Modifier.fillMaxWidth(),
-            verticalAlignment     = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(CircleShape)
-                    .border(2.dp, VakTextWhite, CircleShape)
-                    .background(VakHeaderBlue)
-            )
-            Column {
-                Text(namaAnak,   color = VakTextWhite,                    fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                Text(usiaGender, color = VakTextWhite.copy(alpha = 0.8f), fontSize = 14.sp)
+            Row(
+                modifier              = Modifier.fillMaxWidth(),
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .border(2.dp, Color.White, CircleShape)
+                        .background(VakHeaderBlue)
+                )
+                Column {
+                    Text(namaAnak,   color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                    Text(usiaGender, color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
+                }
             }
         }
     }
