@@ -74,7 +74,7 @@ fun DaftarAnakBaruScreen(
             namaLengkap     = namaLengkap,
             onNamaChange    = { namaLengkap = it; errorNama = false },
             nik             = nik,
-            onNikChange     = { nik = it; errorNik = false },
+            onNikChange     = { if (it.length <= 16 && it.all { c -> c.isDigit() }) { nik = it; errorNik = false } },
             tanggalLahir    = tanggalLahir,
             onTanggalChange = { tanggalLahir = it; errorTgl = false },
             jenisKelamin    = jenisKelamin,

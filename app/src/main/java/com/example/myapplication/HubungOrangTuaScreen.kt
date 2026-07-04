@@ -133,7 +133,7 @@ fun HubungOrangTuaScreen(
                 username      = username,
                 onUserChange  = { username = it; errorUser = false },
                 noHp          = noHp,
-                onHpChange    = { noHp = it; errorHp = false },
+                onHpChange    = { if (it.length <= 13 && it.all { c -> c.isDigit() }) { noHp = it; errorHp = false } },
                 password      = password,
                 onPassChange  = { password = it; errorPass = false },
                 errorNama     = errorNama,

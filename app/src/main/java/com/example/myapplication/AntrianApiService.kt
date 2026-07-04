@@ -20,6 +20,8 @@ object AntrianApiService {
 
     // ─────────────────────────────────────────────────────────────────────
     //  CORE: Pastikan cookie __test valid untuk host ini.
+    //  (fungsi ini, parseChallenge, aesDecrypt, setTestCookie, httpClient
+    //   diasumsikan sudah ada di project kamu / file lain — TIDAK diubah)
     // ─────────────────────────────────────────────────────────────────────
     private fun ensureCookie(baseUrl: String) {
         try {
@@ -47,30 +49,84 @@ object AntrianApiService {
         }
     }
 
-    private fun getJson(url: String): String {
-        ensureCookie(url)
+    // ─────────────────────────────────────────────────────────────────────
+    //  FIX PERFORMA: cek dulu apakah body yang balik itu "challenge page"
+    //  (bukan JSON). Kalau bukan challenge, langsung dipakai — nggak perlu
+    //  paksa solve cookie di setiap request seperti sebelumnya.
+    // ─────────────────────────────────────────────────────────────────────
+    private fun isChallengePage(body: String): Boolean {
+        val t = body.trimStart()
+        return !(t.startsWith("{") || t.startsWith("["))
+    }
+
+    private fun rawGet(url: String): String {
         val req  = Request.Builder().url(url).header("User-Agent", UA)
             .header("Accept", "application/json").build()
         val res  = httpClient.newCall(req).execute()
         val body = res.body?.string() ?: ""
         res.close()
-        android.util.Log.d("ANTRIAN_API", "GET $url → ${body.take(200)}")
         return body
     }
 
-    private fun postJson(url: String, form: FormBody): String {
-        ensureCookie(url)
+    private fun rawPost(url: String, form: FormBody): String {
         val req  = Request.Builder().url(url).header("User-Agent", UA)
             .header("Accept", "application/json").post(form).build()
         val res  = httpClient.newCall(req).execute()
         val body = res.body?.string() ?: ""
         res.close()
+        return body
+    }
+
+    // FIX: coba request asli dulu (1 call). Kalau ternyata kena challenge
+    // page (bukan JSON), baru solve cookie lalu retry sekali. Ini jauh
+    // lebih cepat dibanding selalu ensureCookie() di setiap request.
+    private fun getJson(url: String): String {
+        var body = rawGet(url)
+        if (isChallengePage(body)) {
+            android.util.Log.d("ANTRIAN_API", "Kena challenge, solving cookie... ($url)")
+            ensureCookie(url)
+            body = rawGet(url)
+        }
+        android.util.Log.d("ANTRIAN_API", "GET $url → ${body.take(200)}")
+        return body
+    }
+
+    private fun postJson(url: String, form: FormBody): String {
+        var body = rawPost(url, form)
+        if (isChallengePage(body)) {
+            android.util.Log.d("ANTRIAN_API", "Kena challenge, solving cookie... ($url)")
+            ensureCookie(url)
+            body = rawPost(url, form)
+        }
         android.util.Log.d("ANTRIAN_API", "POST $url → ${body.take(300)}")
         return body
     }
 
     private fun isJsonOk(body: String) =
         body.isNotBlank() && !body.contains("<html", ignoreCase = true)
+
+    // FIX: helper terpusat untuk menilai sukses/gagal dari response JSON.
+    // Sebelumnya: "diawali { = sukses" atau "gagal parse = sukses" — itu
+    // yang bikin UI berubah padahal di server gagal/tidak berubah.
+    // Sekarang: harus ada penanda sukses eksplisit, kalau ada "error"/
+    // success=false dianggap gagal, dan kalau parsing gagal → gagal.
+    private fun isResponseSuccess(body: String): Boolean {
+        if (!isJsonOk(body)) return false
+        return try {
+            val j = JSONObject(body)
+            when {
+                j.has("success") -> j.optBoolean("success", false)
+                j.has("error")   -> false
+                j.optString("status").equals("success", ignoreCase = true) -> true
+                j.optString("status").equals("error", ignoreCase = true)   -> false
+                j.has("id") -> true   // banyak API PHP balikin object row yang barusan diproses
+                else -> false
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("ANTRIAN_API", "isResponseSuccess: gagal parse JSON: ${e.message}")
+            false   // FIX: sebelumnya default ke true, ini akar bug utamanya
+        }
+    }
 
     // ─────────────────────────────────────────────────────────────────────
     //  PRIVATE: Ambil jadwal_id aktif hari ini dari DB lokal
@@ -250,6 +306,7 @@ object AntrianApiService {
     //  3. POST antrian_item.php — Ortu ambil antrian
     //  FIX: nomor baru diambil dari total server (bukan lokal) untuk hindari
     //       bentrok jika banyak user ambil antrian bersamaan.
+    //  FIX: pengecekan sukses pakai isResponseSuccess() (lihat penjelasan di atas)
     // ═════════════════════════════════════════════════════════════════════
     suspend fun ambilAntrian(
         context: Context,
@@ -299,10 +356,10 @@ object AntrianApiService {
                 val antrianBody = postJson(API_ANTRIAN, form)
                 android.util.Log.d("ANTRIAN_API", "Buat antrian header: $antrianBody")
 
-                if (!isJsonOk(antrianBody)) {
+                if (!isResponseSuccess(antrianBody)) {
                     return@withContext AntrianResponse(
                         success = false,
-                        message = "Gagal buat sesi antrian di server"
+                        message = "Gagal buat sesi antrian di server: ${antrianBody.take(100)}"
                     )
                 }
 
@@ -352,17 +409,9 @@ object AntrianApiService {
             val itemBody = postJson(API_ANTRIAN_ITEM, itemForm)
             android.util.Log.d("ANTRIAN_API", "POST antrian_item: $itemBody")
 
-            val sukses = if (isJsonOk(itemBody)) {
-                try {
-                    val j = JSONObject(itemBody)
-                    j.optBoolean("success", false) ||
-                            j.optString("status") == "success" ||
-                            j.optString("message").isNotBlank()
-                } catch (e: Exception) { true }
-            } else {
-                android.util.Log.e("ANTRIAN_API", "POST antrian_item gagal HTML: ${itemBody.take(100)}")
-                false
-            }
+            // FIX: sebelumnya kalau gagal parse JSON dianggap sukses (true).
+            // Sekarang pakai isResponseSuccess() yang defaultnya gagal.
+            val sukses = isResponseSuccess(itemBody)
 
             if (!sukses) {
                 return@withContext AntrianResponse(
@@ -415,6 +464,7 @@ object AntrianApiService {
 
     // ═════════════════════════════════════════════════════════════════════
     //  4. Kader: panggil antrian berikutnya (status item → 0)
+    //  FIX: pengecekan sukses pakai isResponseSuccess()
     // ═════════════════════════════════════════════════════════════════════
     suspend fun panggilAntrian(context: Context, item: AntrianItemApi): Boolean = withContext(Dispatchers.IO) {
         try {
@@ -433,11 +483,7 @@ object AntrianApiService {
             val body = postJson(API_ANTRIAN_ITEM, form)
             android.util.Log.d("ANTRIAN_API", "panggilAntrian response: $body")
 
-            val success = isJsonOk(body) && (
-                    body.lowercase().contains("success") ||
-                            body.lowercase().contains("true") ||
-                            body.startsWith("{")
-                    )
+            val success = isResponseSuccess(body)
 
             if (success) {
                 // Update lokal langsung agar UI sinkron tanpa tunggu server
@@ -449,6 +495,7 @@ object AntrianApiService {
 
                 return@withContext true
             }
+            android.util.Log.w("ANTRIAN_API", "panggilAntrian ditolak server: ${body.take(150)}")
             return@withContext false
         } catch (e: Exception) {
             android.util.Log.e("ANTRIAN_API", "panggilAntrian error: ${e.message}", e)
@@ -458,8 +505,7 @@ object AntrianApiService {
 
     // ═════════════════════════════════════════════════════════════════════
     //  5. Kader: tidak hadir (status item → 2) lalu lanjut nomor
-    //  FIX: cari item berdasarkan nomor saja (bukan status=0), karena
-    //       bisa saja item belum sempat di-update ke status 0 di lokal.
+    //  FIX: pengecekan sukses pakai isResponseSuccess()
     // ═════════════════════════════════════════════════════════════════════
     suspend fun tidakHadir(context: Context, item: AntrianItemApi): Boolean = withContext(Dispatchers.IO) {
         try {
@@ -475,12 +521,9 @@ object AntrianApiService {
                 .build()
 
             val body = postJson(API_ANTRIAN_ITEM, form)
+            android.util.Log.d("ANTRIAN_API", "tidakHadir response: $body")
 
-            val success = isJsonOk(body) && (
-                    body.lowercase().contains("success") ||
-                            body.lowercase().contains("true") ||
-                            body.startsWith("{")
-                    )
+            val success = isResponseSuccess(body)
 
             if (success) {
                 val updated = item.copy(status = 2)
@@ -488,6 +531,7 @@ object AntrianApiService {
                 updateNomorSaatIni(item.antrianId, item.nomor)
                 return@withContext true
             }
+            android.util.Log.w("ANTRIAN_API", "tidakHadir ditolak server: ${body.take(150)}")
             return@withContext false
         } catch (e: Exception) {
             android.util.Log.e("ANTRIAN_API", "tidakHadir error: ${e.message}", e)
@@ -523,7 +567,7 @@ object AntrianApiService {
                 .build()
             postJson(API_ANTRIAN, form)
         } catch (e: Exception) {
-            android.util.Log.e("ANTRIAN_API", "updateNomorSaatIni error: ${e.message}", e)
+            android.util.Log.e("ANTRIAN_API", "updateNomorSaatIni error: ${e.message}")
         }
     }
 
@@ -538,7 +582,7 @@ object AntrianApiService {
                 .build()
             postJson(API_ANTRIAN, form)
         } catch (e: Exception) {
-            android.util.Log.e("ANTRIAN_API", "updateTotal error: ${e.message}", e)
+            android.util.Log.e("ANTRIAN_API", "updateTotal error: ${e.message}")
         }
     }
 
@@ -569,8 +613,6 @@ object AntrianApiService {
 
     // ═════════════════════════════════════════════════════════════════════
     //  LOCAL DB: simpan antrian_item ke SQLite lokal (upsert)
-    //  FIX: CONFLICT_REPLACE sudah benar — hanya replace jika id sama.
-    //       Tidak perlu cek manual "sudah ada atau belum".
     // ═════════════════════════════════════════════════════════════════════
     private fun saveAntrianItemsToLocal(context: Context, items: List<AntrianItemApi>) {
         if (items.isEmpty()) return
@@ -714,7 +756,7 @@ object AntrianApiService {
         ortuId         = obj.optString("ortu_id", ""),
         nomor          = obj.optInt("nomor", 0),
         waktuAmbil     = obj.optString("waktu_ambil", ""),
-        waktuDipanggil = obj.optString("waktu_dipanggil", null)?.takeIf { it.isNotBlank() },
+        waktuDipanggil = obj.optString("waktu_dipanggil", "").takeIf { it.isNotBlank() },
         status         = obj.optInt("status", 1)
     )
 
