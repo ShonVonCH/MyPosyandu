@@ -982,8 +982,7 @@ class LaporanRepository(private val context: Context) {
     }
 
     private fun hitungZScoreTBU(tb: Double, umurBulan: Int, jenisKelamin: String): Double {
-        val isLaki = jenisKelamin.contains("L", ignoreCase = true) ||
-                jenisKelamin.contains("laki", ignoreCase = true)
+        val isLaki = jenisKelamin.startsWith("L", ignoreCase = true)
         val tabel = if (isLaki) tabelTBU_LakiLaki else tabelTBU_Perempuan
         val (median, sd) = interpolasi(umurBulan, tabel)
         return (tb - median) / sd

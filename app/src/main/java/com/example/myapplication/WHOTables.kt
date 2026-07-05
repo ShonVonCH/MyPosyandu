@@ -141,7 +141,7 @@ fun analisisWHO(
     umurBulan   : Int,
     jenisKelamin: String
 ): HasilAnalisis {
-    val isLaki = jenisKelamin.contains("Laki", ignoreCase = true)
+    val isLaki = jenisKelamin.startsWith("L", ignoreCase = true)
 
     val (medTB, sdTB) = interpolasi(umurBulan, if (isLaki) tabelTBU_LakiLaki else tabelTBU_Perempuan)
     val (medBB, sdBB) = interpolasi(umurBulan, if (isLaki) tabelBBU_LakiLaki else tabelBBU_Perempuan)

@@ -49,7 +49,7 @@ fun JadwalPosyanduScreen(
             FloatingActionButton(
                 onClick = { if (!isSubmitting) showDialog = true },
                 backgroundColor = AccentGreen,
-                modifier = Modifier.padding(bottom = 16.dp),
+                modifier = Modifier.padding(bottom = 32.dp),
                 shape = CircleShape
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Tambah Jadwal", tint = Color.White)

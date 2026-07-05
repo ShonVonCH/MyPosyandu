@@ -550,7 +550,7 @@ private fun TabGrafikTBUContent(
     jenisKelamin: String,
     hasil       : HasilAnalisis?
 ) {
-    val isLaki = jenisKelamin.contains("Laki", ignoreCase = true)
+    val isLaki = jenisKelamin.startsWith("L", ignoreCase = true)
     val tabel  = if (isLaki) tabelTBU_LakiLaki else tabelTBU_Perempuan
 
     Column(
@@ -598,7 +598,7 @@ private fun TabGrafikBBUContent(
     jenisKelamin: String,
     hasil       : HasilAnalisis?
 ) {
-    val isLaki = jenisKelamin.contains("Laki", ignoreCase = true)
+    val isLaki = jenisKelamin.startsWith("L", ignoreCase = true)
     val tabel  = if (isLaki) tabelBBU_LakiLaki else tabelBBU_Perempuan
 
     Column(

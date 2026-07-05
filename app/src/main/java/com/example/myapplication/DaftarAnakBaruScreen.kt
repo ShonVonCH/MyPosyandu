@@ -54,6 +54,7 @@ fun DaftarAnakBaruScreen(
     var errorTgl by remember { mutableStateOf(false) }
     var errorJenis by remember { mutableStateOf(false) }
     var errorAlamat by remember { mutableStateOf(false) }
+    var jenisInvalid by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -78,13 +79,24 @@ fun DaftarAnakBaruScreen(
             tanggalLahir    = tanggalLahir,
             onTanggalChange = { tanggalLahir = it; errorTgl = false },
             jenisKelamin    = jenisKelamin,
-            onJenisChange   = { jenisKelamin = it; errorJenis = false },
+            onJenisChange   = { 
+                val input = it.uppercase().take(1)
+                if (input.isEmpty() || input == "L" || input == "P") {
+                    jenisKelamin = input
+                    errorJenis = false
+                    jenisInvalid = false
+                } else {
+                    // Jika user maksa ketik karakter lain, biarkan tapi set error
+                    jenisKelamin = input
+                    jenisInvalid = true
+                }
+            },
             alamat          = alamat,
             onAlamatChange  = { alamat = it; errorAlamat = false },
             errorNama       = errorNama,
             errorNik        = errorNik,
             errorTgl        = errorTgl,
-            errorJenis      = errorJenis,
+            errorJenis      = errorJenis || jenisInvalid,
             errorAlamat     = errorAlamat,
             modifier        = Modifier.padding(horizontal = 16.dp)
         )
@@ -99,6 +111,7 @@ fun DaftarAnakBaruScreen(
                     if (nik.isBlank()) { errorNik = true; hasError = true }
                     if (tanggalLahir.isBlank()) { errorTgl = true; hasError = true }
                     if (jenisKelamin.isBlank()) { errorJenis = true; hasError = true }
+                    if (jenisKelamin != "L" && jenisKelamin != "P") { jenisInvalid = true; hasError = true }
                     if (alamat.isBlank()) { errorAlamat = true; hasError = true }
 
                     if (!hasError) {
@@ -122,6 +135,7 @@ fun DaftarAnakBaruScreen(
                     if (nik.isBlank()) { errorNik = true; hasError = true }
                     if (tanggalLahir.isBlank()) { errorTgl = true; hasError = true }
                     if (jenisKelamin.isBlank()) { errorJenis = true; hasError = true }
+                    if (jenisKelamin != "L" && jenisKelamin != "P") { jenisInvalid = true; hasError = true }
                     if (alamat.isBlank()) { errorAlamat = true; hasError = true }
 
                     if (!hasError) {
@@ -272,7 +286,7 @@ fun FormIdentitas(
             Row(
                 modifier              = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment     = Alignment.Bottom
+                verticalAlignment     = Alignment.Top
             ) {
                 // Kolom tanggal lahir — tidak bisa diketik, klik buka DatePicker
                 Column(
@@ -321,6 +335,7 @@ fun FormIdentitas(
                     onValueChange = onJenisChange,
                     placeholder   = "L / P",
                     isError       = errorJenis,
+                    errorMessage  = if (jenisKelamin.isNotBlank() && jenisKelamin != "L" && jenisKelamin != "P") "Hanya L/P" else "Harus diisi",
                     modifier      = Modifier.weight(1f)
                 )
             }
@@ -349,6 +364,7 @@ fun FormField(
     modifier     : Modifier                  = Modifier,
     keyboardType : KeyboardType              = KeyboardType.Text,
     isError      : Boolean                   = false,
+    errorMessage : String                    = "Harus diisi",
     trailingIcon : (@Composable () -> Unit)? = null
 ) {
     Column(
@@ -391,7 +407,7 @@ fun FormField(
             )
         )
         if (isError) {
-            Text("Harus diisi", color = Color.Red, fontSize = 11.sp)
+            Text(errorMessage, color = Color.Red, fontSize = 11.sp)
         }
     }
 }
