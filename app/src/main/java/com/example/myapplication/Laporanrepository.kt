@@ -265,10 +265,21 @@ class LaporanRepository(private val context: Context) {
                     arrayOf(anakId, bulanDari, bulanSampai)
                 )
 
-                val pmrkTgl = if (cursorPmrk.moveToFirst()) cursorPmrk.getString(0) ?: "-" else "-"
-                val pmrkBb = if (cursorPmrk.moveToFirst()) cursorPmrk.getString(1) ?: "-" else "-"
-                val pmrkTb = if (cursorPmrk.moveToFirst()) cursorPmrk.getString(2) ?: "-" else "-"
-                val pmrkStatus = if (cursorPmrk.moveToFirst()) cursorPmrk.getString(3) ?: "-" else "-"
+                val pmrkTgl: String
+                val pmrkBb: String
+                val pmrkTb: String
+                val pmrkStatus: String
+                if (cursorPmrk.moveToFirst()) {
+                    pmrkTgl = cursorPmrk.getString(0) ?: "-"
+                    pmrkBb = cursorPmrk.getString(1) ?: "-"
+                    pmrkTb = cursorPmrk.getString(2) ?: "-"
+                    pmrkStatus = cursorPmrk.getString(3) ?: "-"
+                } else {
+                    pmrkTgl = "-"
+                    pmrkBb = "-"
+                    pmrkTb = "-"
+                    pmrkStatus = "-"
+                }
                 cursorPmrk.close()
 
                 // Hitung umur
@@ -301,9 +312,9 @@ class LaporanRepository(private val context: Context) {
                 else -> ExportResult(false, "Format tidak didukung: $format")
             }
 
-        } catch (e: Exception) {
-            Log.e("LAPORAN_EXPORT", "Export error: ${e.message}", e)
-            return@withContext ExportResult(false, "Export gagal: ${e.message}")
+        } catch (t: Throwable) {
+            Log.e("LAPORAN_EXPORT", "Export error: ${t.message}", t)
+            return@withContext ExportResult(false, "Export gagal: ${t.message}")
         }
     }
 
@@ -449,22 +460,22 @@ class LaporanRepository(private val context: Context) {
             }
 
             val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
-            uri?.let {
-                context.contentResolver.openOutputStream(it)?.use { os ->
-                    pdfDocument.writeTo(os)
-                }
-            }
+                ?: return ExportResult(false, "Gagal membuat file PDF di folder Downloads")
 
+            val os = context.contentResolver.openOutputStream(uri)
+                ?: return ExportResult(false, "Gagal membuka output stream untuk PDF")
+            
+            os.use { pdfDocument.writeTo(it) }
             pdfDocument.close()
 
             ExportResult(
                 true,
                 "PDF berhasil disimpan di Downloads/$fileName.pdf",
-                uri?.toString()
+                uri.toString()
             )
-        } catch (e: Exception) {
-            Log.e("PDF_EXPORT", "PDF error: ${e.message}", e)
-            ExportResult(false, "PDF gagal: ${e.message}")
+        } catch (t: Throwable) {
+            Log.e("PDF_EXPORT", "PDF error: ${t.message}", t)
+            ExportResult(false, "PDF gagal: ${t.message}")
         }
     }
 
@@ -521,15 +532,17 @@ class LaporanRepository(private val context: Context) {
             }
 
             val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
-            uri?.let {
-                context.contentResolver.openOutputStream(it)?.use { os ->
-                    os.write(csvBuilder.toString().toByteArray(Charsets.UTF_8))
-                }
-            }
+                ?: return ExportResult(false, "Gagal membuat file CSV di folder Downloads")
 
-            ExportResult(true, "CSV berhasil disimpan di Downloads/$fileName.csv", uri?.toString())
-        } catch (e: Exception) {
-            ExportResult(false, "CSV gagal: ${e.message}")
+            val os = context.contentResolver.openOutputStream(uri)
+                ?: return ExportResult(false, "Gagal membuka output stream untuk CSV")
+
+            os.use { it.write(csvBuilder.toString().toByteArray(Charsets.UTF_8)) }
+
+            ExportResult(true, "CSV berhasil disimpan di Downloads/$fileName.csv", uri.toString())
+        } catch (t: Throwable) {
+            Log.e("CSV_EXPORT", "CSV error: ${t.message}", t)
+            ExportResult(false, "CSV gagal: ${t.message}")
         }
     }
 
@@ -555,7 +568,7 @@ class LaporanRepository(private val context: Context) {
             // Check if Apache POI available
             try {
                 Class.forName("org.apache.poi.xssf.usermodel.XSSFWorkbook")
-            } catch (e: ClassNotFoundException) {
+            } catch (e: Throwable) {
                 // Fallback to CSV with .xlsx extension if POI not available
                 return exportExcelFallback(data, namaKader, namaPosyandu, bulanDari, bulanSampai, fileName)
             }
@@ -567,7 +580,7 @@ class LaporanRepository(private val context: Context) {
             // Styles
             val titleFont = workbook.createFont().apply {
                 bold = true
-                fontHeightInPoints = 16
+                fontHeightInPoints = 16.toShort()
                 color = org.apache.poi.ss.usermodel.IndexedColors.DARK_GREEN.getIndex()
             }
             val titleStyle = workbook.createCellStyle().apply { setFont(titleFont) }
@@ -630,7 +643,9 @@ class LaporanRepository(private val context: Context) {
                 dataRow.createCell(8).setCellValue(row["tb"]?.toDoubleOrNull() ?: 0.0)
                 dataRow.createCell(9).setCellValue(row["status_gizi"] ?: "")
 
-                (0..9).forEach { dataRow.getCell(it).cellStyle = cellStyle }
+                (0..9).forEach { i ->
+                    dataRow.getCell(i)?.cellStyle = cellStyle
+                }
             }
 
             // Summary
@@ -638,9 +653,6 @@ class LaporanRepository(private val context: Context) {
             val summaryRow = sheet.createRow(rowNum++)
             summaryRow.createCell(0).setCellValue("Total Anak:")
             summaryRow.createCell(1).setCellValue(data.size.toDouble())
-
-            // Auto size columns
-            (0..9).forEach { sheet.autoSizeColumn(it) }
 
             // Save
             val contentValues = ContentValues().apply {
@@ -650,17 +662,18 @@ class LaporanRepository(private val context: Context) {
             }
 
             val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
-            uri?.let {
-                context.contentResolver.openOutputStream(it)?.use { os ->
-                    workbook.write(os)
-                }
-            }
+                ?: return ExportResult(false, "Gagal membuat file Excel di folder Downloads")
+
+            val os = context.contentResolver.openOutputStream(uri)
+                ?: return ExportResult(false, "Gagal membuka output stream untuk Excel")
+
+            os.use { workbook.write(it) }
             workbook.close()
 
-            ExportResult(true, "Excel berhasil disimpan di Downloads/$fileName.xlsx", uri?.toString())
-        } catch (e: Exception) {
-            Log.e("EXCEL_EXPORT", "Excel error: ${e.message}", e)
-            ExportResult(false, "Excel gagal: ${e.message}")
+            ExportResult(true, "Excel berhasil disimpan di Downloads/$fileName.xlsx", uri.toString())
+        } catch (t: Throwable) {
+            Log.e("EXCEL_EXPORT", "Excel error: ${t.message}", t)
+            ExportResult(false, "Excel gagal: ${t.message}")
         }
     }
 
@@ -700,15 +713,17 @@ class LaporanRepository(private val context: Context) {
             }
 
             val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
-            uri?.let {
-                context.contentResolver.openOutputStream(it)?.use { os ->
-                    os.write(csvBuilder.toString().toByteArray(Charsets.UTF_8))
-                }
-            }
+                ?: return ExportResult(false, "Gagal membuat file Excel (fallback) di folder Downloads")
 
-            ExportResult(true, "Excel (fallback) disimpan di Downloads/$fileName.xls", uri?.toString())
-        } catch (e: Exception) {
-            ExportResult(false, "Excel fallback gagal: ${e.message}")
+            val os = context.contentResolver.openOutputStream(uri)
+                ?: return ExportResult(false, "Gagal membuka output stream untuk Excel (fallback)")
+
+            os.use { it.write(csvBuilder.toString().toByteArray(Charsets.UTF_8)) }
+
+            ExportResult(true, "Excel (fallback) disimpan di Downloads/$fileName.xls", uri.toString())
+        } catch (t: Throwable) {
+            Log.e("EXCEL_FALLBACK", "Excel fallback error: ${t.message}", t)
+            ExportResult(false, "Excel fallback gagal: ${t.message}")
         }
     }
 
@@ -960,18 +975,10 @@ class LaporanRepository(private val context: Context) {
 
     private fun hitungUmurBulanPadaTanggal(tglLahir: String, tglReferensi: String): Int {
         return try {
-            val formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy")
-            val lahir = LocalDate.parse(tglLahir, formatter)
-            val referensi = LocalDate.parse(tglReferensi, formatter)
+            val lahir = parseTanggal(tglLahir) ?: return 0
+            val referensi = parseTanggal(tglReferensi) ?: return 0
             ChronoUnit.MONTHS.between(lahir, referensi).toInt().coerceAtLeast(0)
-        } catch (e: Exception) {
-            try {
-                val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
-                val lahir = LocalDate.parse(tglLahir, formatter)
-                val referensi = LocalDate.parse(tglReferensi, formatter)
-                ChronoUnit.MONTHS.between(lahir, referensi).toInt().coerceAtLeast(0)
-            } catch (e2: Exception) { 0 }
-        }
+        } catch (e: Exception) { 0 }
     }
 
     private fun hitungZScoreTBU(tb: Double, umurBulan: Int, jenisKelamin: String): Double {
@@ -984,15 +991,8 @@ class LaporanRepository(private val context: Context) {
 
     private fun hitungUmurBulan(tglLahir: String): Int {
         return try {
-            val formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy")
-            val lahir = LocalDate.parse(tglLahir, formatter)
+            val lahir = parseTanggal(tglLahir) ?: return 0
             ChronoUnit.MONTHS.between(lahir, LocalDate.now()).toInt().coerceAtLeast(0)
-        } catch (e: Exception) {
-            try {
-                val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
-                val lahir = LocalDate.parse(tglLahir, formatter)
-                ChronoUnit.MONTHS.between(lahir, LocalDate.now()).toInt().coerceAtLeast(0)
-            } catch (e2: Exception) { 0 }
-        }
+        } catch (e: Exception) { 0 }
     }
 }
