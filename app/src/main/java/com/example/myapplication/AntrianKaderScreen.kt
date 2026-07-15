@@ -401,14 +401,21 @@ private fun BarisAntrianKader(
             Text(row.namaAnak, color = KaderTextWhite, fontSize = 15.sp)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TextButton(onClick = onSkip, enabled = !isDisabled) {
-                Text("Tidak Hadir", color = KaderRed, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Button(
+                onClick  = onSkip,
+                enabled  = !isDisabled,
+                colors   = ButtonDefaults.buttonColors(backgroundColor = KaderRed),
+                modifier = Modifier.height(36.dp),
+                shape    = RoundedCornerShape(8.dp)
+            ) {
+                Text("Tidak Hadir", color = KaderTextWhite, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
             Button(
                 onClick  = onPanggil,
                 enabled  = !isDisabled,
                 colors   = ButtonDefaults.buttonColors(backgroundColor = if (isPertama) KaderGreen else KaderBlue),
-                modifier = Modifier.height(36.dp)
+                modifier = Modifier.height(36.dp),
+                shape    = RoundedCornerShape(8.dp)
             ) {
                 Text("Panggil", color = KaderTextWhite, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
