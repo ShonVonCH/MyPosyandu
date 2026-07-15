@@ -59,7 +59,6 @@ fun JadwalPosyanduScreen(
         Column(
             modifier = Modifier.fillMaxSize().padding(innerPadding)
         ) {
-            // Header
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -121,7 +120,7 @@ fun JadwalPosyanduScreen(
                 onDismiss = { if (!isSubmitting) showDialog = false },
                 onConfirm = { date, start, end, location ->
                     val newJadwal = JadwalData(
-                        id         = 0,  // auto-increment, tidak dipakai saat insert
+                        id         = 0,
                         posyanduId = posyanduId,
                         tanggal    = date,
                         jamMulai   = start,

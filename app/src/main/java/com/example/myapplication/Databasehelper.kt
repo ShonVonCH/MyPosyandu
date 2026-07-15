@@ -9,15 +9,13 @@ class DatabaseHelper(context: Context) :
 
     companion object {
         const val DATABASE_NAME    = "posyandu.db"
-        const val DATABASE_VERSION = 17          // naik dari 15 → 16 (re-struktur menu sehat)
+        const val DATABASE_VERSION = 17
 
-        // ── Tabel menu_kategori ───────────────────────────────────
         const val TABLE_MENU_KATEGORI    = "menu_kategori"
         const val COL_MK_ID              = "id"
         const val COL_MK_NAMA            = "nama"
         const val COL_MK_RANGE_USIA      = "range_usia"
 
-        // ── Tabel menu_sehat ──────────────────────────────────────
         const val TABLE_MENU_SEHAT       = "menu_sehat"
         const val COL_MS_ID              = "id"
         const val COL_MS_KATEGORI_ID     = "kategori_id"
@@ -27,10 +25,6 @@ class DatabaseHelper(context: Context) :
         const val COL_MS_BAHAN           = "bahan"
         const val COL_MS_CARA_MEMBUAT    = "cara_membuat"
         const val COL_MS_GIZI            = "kandungan_gizi"
-
-        // ─────────────────────────────────────────────────────────
-        //  DDL
-        // ─────────────────────────────────────────────────────────
 
         private const val SQL_CREATE_MENU_KATEGORI = """
             CREATE TABLE IF NOT EXISTS $TABLE_MENU_KATEGORI (
@@ -67,7 +61,6 @@ class DatabaseHelper(context: Context) :
         const val COL_PMRK_STATUS_GIZI   = "status_gizi"
         const val COL_PMRK_CATATAN       = "catatan"
 
-        // ── Tabel imunisasi (legacy, diganti vaksin_riwayat) ──────
         const val TABLE_IMUNISASI        = "imunisasi"
         const val COL_IMN_ID             = "id"
         const val COL_IMN_NAMA_ANAK      = "nama_anak"
@@ -77,7 +70,6 @@ class DatabaseHelper(context: Context) :
         const val COL_IMN_TGL_VAKSIN     = "tgl_vaksin"
         const val COL_IMN_STATUS         = "status"
 
-        // ── Tabel posyandu ────────────────────────────────────────
         const val TABLE_POSYANDU         = "posyandu"
         const val COL_POSYANDU_ID        = "id"
         const val COL_POSYANDU_NAMA      = "nama"
@@ -85,7 +77,6 @@ class DatabaseHelper(context: Context) :
         const val COL_POSYANDU_RW        = "rw"
         const val COL_POSYANDU_ALAMAT    = "alamat"
 
-        // ── Tabel jadwal_posyandu ─────────────────────────────────
         const val TABLE_JADWAL_POSYANDU    = "jadwal_posyandu"
         const val COL_JADWAL_ID            = "id"
         const val COL_JADWAL_POSYANDU_ID   = "posyandu_id"
@@ -95,7 +86,6 @@ class DatabaseHelper(context: Context) :
         const val COL_JADWAL_LOKASI        = "lokasi"
         const val COL_JADWAL_STATUS        = "status"
 
-        // ── Tabel vaksin_referensi ────────────────────────────────
         const val TABLE_VAKSIN_REF            = "vaksin_referensi"
         const val COL_VAKSIN_REF_ID           = "id"
         const val COL_VAKSIN_REF_KODE         = "kode"
@@ -104,7 +94,6 @@ class DatabaseHelper(context: Context) :
         const val COL_VAKSIN_REF_BATAS_BULAN  = "batas_bulan"
         const val COL_VAKSIN_REF_KELOMPOK     = "kelompok"
 
-        // ── Tabel vaksin_riwayat ──────────────────────────────────
         const val TABLE_VAKSIN_RIWAYAT         = "vaksin_riwayat"
         const val COL_VR_ID                    = "id"
         const val COL_VR_ANAK_ID               = "anak_id"
@@ -113,7 +102,6 @@ class DatabaseHelper(context: Context) :
         const val COL_VR_TANGGAL_PEMBERIAN     = "tanggal_pemberian"
         const val COL_VR_LOKASI                = "lokasi"
 
-        // ── Tabel users (kader) ───────────────────────────────────
         const val TABLE_USERS          = "users"
         const val COL_USERS_ID         = "id"
         const val COL_USERS_NAMA       = "nama"
@@ -123,7 +111,6 @@ class DatabaseHelper(context: Context) :
         const val COL_USERS_POSYANDU_ID= "posyandu_id"
         const val COL_USERS_CREATED_AT = "created_at"
 
-        // ── Tabel anak ────────────────────────────────────────────
         const val TABLE_ANAK              = "anak"
         const val COL_ANAK_ID             = "id"
         const val COL_ANAK_NAMA           = "nama"
@@ -133,7 +120,6 @@ class DatabaseHelper(context: Context) :
         const val COL_ANAK_POSYANDU_ID    = "posyandu_id"
         const val COL_ANAK_CREATED_AT     = "created_at"
 
-        // ── Tabel ortu ────────────────────────────────────────────
         const val TABLE_ORTU              = "ortu"
         const val COL_ORTU_ID             = "id"
         const val COL_ORTU_NAMA           = "nama"
@@ -143,7 +129,6 @@ class DatabaseHelper(context: Context) :
         const val COL_ORTU_POSYANDU_ID    = "posyandu_id"
         const val COL_ORTU_CREATED_AT     = "created_at"
 
-        // ── Tabel antrian (header antrian per hari) ───────────
         const val TABLE_ANTRIAN              = "antrian"
         const val COL_ANT_ID                 = "id"
         const val COL_ANT_JADWAL_ID          = "jadwal_id"
@@ -152,7 +137,6 @@ class DatabaseHelper(context: Context) :
         const val COL_ANT_TOTAL_ANTRIAN      = "total_antrian"
         const val COL_ANT_STATUS             = "status"
 
-        // ── Tabel antrian_item (detail per anak) ──────────────
         const val TABLE_ANTRIAN_ITEM         = "antrian_item"
         const val COL_ANTITEM_ID             = "id"
         const val COL_ANTITEM_ANTRIAN_ID     = "antrian_id"
@@ -161,9 +145,8 @@ class DatabaseHelper(context: Context) :
         const val COL_ANTITEM_NOMOR          = "nomor"
         const val COL_ANTITEM_WAKTU_AMBIL    = "waktu_ambil"
         const val COL_ANTITEM_WAKTU_DIPANGGIL= "waktu_dipanggil"
-        const val COL_ANTITEM_STATUS         = "status"   // 1=menunggu, 0=dipanggil, 2=tidak hadir
+        const val COL_ANTITEM_STATUS         = "status"
 
-        // ── Tabel laporan ─────────────────────────────────────────
         const val TABLE_LAPORAN                   = "laporan"
         const val COL_LAP_ID                      = "id"
         const val COL_LAP_JADWAL_ID               = "jadwal_id"
@@ -171,12 +154,8 @@ class DatabaseHelper(context: Context) :
         const val COL_LAP_TOTAL_HADIR             = "total_hadir"
         const val COL_LAP_TOTAL_STUNTING          = "total_stunting"
         const val COL_LAP_TOTAL_VAKSIN_TERLAMBAT  = "total_vaksin_terlambat"
-        const val COL_LAP_RINGKASAN               = "ringkasan"       // JSON text
-        const val COL_LAP_GENERATED_AT            = "generated_at"    // ISO-8601 timestamp
-
-        // ─────────────────────────────────────────────────────────
-        //  DDL
-        // ─────────────────────────────────────────────────────────
+        const val COL_LAP_RINGKASAN               = "ringkasan"
+        const val COL_LAP_GENERATED_AT            = "generated_at"
 
         private const val SQL_CREATE_PEMERIKSAAN = """
             CREATE TABLE IF NOT EXISTS $TABLE_PEMERIKSAAN (
@@ -343,7 +322,6 @@ class DatabaseHelper(context: Context) :
     }
 
     override fun onCreate(db: SQLiteDatabase) {
-        // Urutan penting: tabel induk dibuat sebelum tabel anak (FK)
         db.execSQL(SQL_CREATE_POSYANDU)
         db.execSQL(SQL_CREATE_JADWAL_POSYANDU)
         db.execSQL(SQL_CREATE_VAKSIN_REF)
@@ -406,7 +384,6 @@ class DatabaseHelper(context: Context) :
         }
     }
 
-    // Aktifkan foreign key enforcement setiap koneksi dibuka
     override fun onConfigure(db: SQLiteDatabase) {
         super.onConfigure(db)
         db.setForeignKeyConstraintsEnabled(true)

@@ -41,9 +41,6 @@ class LaporanRepository(private val context: Context) {
         val filePath: String? = null
     )
 
-    // ═══════════════════════════════════════════════════════════
-    //  BUAT & SIMPAN LAPORAN KE SQLITE + SYNC API
-    // ═══════════════════════════════════════════════════════════
     suspend fun buatDanSimpanLaporan(
         dariCal: Calendar,
         sampaiCal: Calendar,
@@ -52,7 +49,6 @@ class LaporanRepository(private val context: Context) {
         val db = DatabaseHelper(context).writableDatabase
 
         try {
-            // 1. Ambil kaderId & posyanduId
             val cursorUser = db.rawQuery(
                 """
                 SELECT ${DatabaseHelper.COL_USERS_ID}, ${DatabaseHelper.COL_USERS_POSYANDU_ID}
@@ -76,7 +72,6 @@ class LaporanRepository(private val context: Context) {
                 return@withContext LaporanResult(null, false, "kaderId kosong")
             }
 
-            // 2. Ambil jadwalId
             val tglDariStr = dbFmt.format(dariCal.time.toInstant()
                 .atZone(java.time.ZoneId.systemDefault()).toLocalDate())
             val tglSampaiStr = dbFmt.format(sampaiCal.time.toInstant()
@@ -97,7 +92,6 @@ class LaporanRepository(private val context: Context) {
             val jadwalId = if (cursorJadwal.moveToFirst()) cursorJadwal.getString(0) else null
             cursorJadwal.close()
 
-            // 3. Format periode
             val dariLocalDate = dariCal.time.toInstant()
                 .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
             val sampaiLocalDate = sampaiCal.time.toInstant()
@@ -106,21 +100,16 @@ class LaporanRepository(private val context: Context) {
             val bulanDari = dbFmtMonth.format(dariLocalDate)
             val bulanSampai = dbFmtMonth.format(sampaiLocalDate)
 
-            // 4. Filter gender
             val genderFilter = when (cakupan) {
                 "Balita Laki-laki" -> "AND a.${DatabaseHelper.COL_ANAK_JENIS_KELAMIN} IN ('L','laki-laki','Laki-laki')"
                 "Balita Perempuan" -> "AND a.${DatabaseHelper.COL_ANAK_JENIS_KELAMIN} IN ('P','perempuan','Perempuan')"
                 else -> ""
             }
 
-            // 5. Hitung metrics
             val totalHadir = hitungTotalHadir(db, bulanDari, bulanSampai)
             val totalStunting = hitungTotalStunting(db, bulanDari, bulanSampai, genderFilter)
             val totalVaksinTerlambat = hitungTotalVaksinTerlambat(db, bulanDari, bulanSampai, genderFilter)
 
-            Log.d("LAPORAN", "Hadir=$totalHadir, Stunting=$totalStunting, VaksinTerlambat=$totalVaksinTerlambat")
-
-            // 6. Insert ke SQLite
             val laporanId = UUID.randomUUID().toString()
             val now = isoFmt.format(Date())
 
@@ -152,9 +141,6 @@ class LaporanRepository(private val context: Context) {
                 return@withContext LaporanResult(null, false, "Gagal insert ke database lokal")
             }
 
-            Log.d("LAPORAN", "Insert lokal sukses: laporanId=$laporanId")
-
-            // 7. SYNC KE API
             val success = insertLaporanToApi(
                 laporanId = laporanId,
                 kaderId = kaderId,
@@ -180,19 +166,15 @@ class LaporanRepository(private val context: Context) {
         }
     }
 
-    // ═══════════════════════════════════════════════════════════
-    //  EXPORT LAPORAN (PDF, EXCEL, CSV)
-    // ═══════════════════════════════════════════════════════════
     suspend fun exportLaporan(
         dariCal: Calendar,
         sampaiCal: Calendar,
         cakupan: String,
-        format: String  // "pdf", "excel", "csv"
+        format: String
     ): ExportResult = withContext(Dispatchers.IO) {
         try {
             val db = DatabaseHelper(context).readableDatabase
 
-            // Ambil data kader
             val cursorUser = db.rawQuery(
                 """
                 SELECT u.${DatabaseHelper.COL_USERS_NAMA}, p.${DatabaseHelper.COL_POSYANDU_NAMA}
@@ -206,7 +188,6 @@ class LaporanRepository(private val context: Context) {
             val namaPosyandu = if (cursorUser.moveToFirst()) cursorUser.getString(1) ?: "Posyandu" else "Posyandu"
             cursorUser.close()
 
-            // Format periode
             val dariLocalDate = dariCal.time.toInstant()
                 .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
             val sampaiLocalDate = sampaiCal.time.toInstant()
@@ -214,14 +195,12 @@ class LaporanRepository(private val context: Context) {
             val bulanDari = dbFmtMonth.format(dariLocalDate)
             val bulanSampai = dbFmtMonth.format(sampaiLocalDate)
 
-            // Filter gender
             val genderFilter = when (cakupan) {
                 "Balita Laki-laki" -> "AND a.${DatabaseHelper.COL_ANAK_JENIS_KELAMIN} IN ('L','laki-laki','Laki-laki')"
                 "Balita Perempuan" -> "AND a.${DatabaseHelper.COL_ANAK_JENIS_KELAMIN} IN ('P','perempuan','Perempuan')"
                 else -> ""
             }
 
-            // Ambil data anak dengan pemeriksaan
             val dataAnak = mutableListOf<Map<String, String>>()
             val cursor = db.rawQuery(
                 """
@@ -251,7 +230,6 @@ class LaporanRepository(private val context: Context) {
                 val gender = cursor.getString(3) ?: ""
                 val ortu = cursor.getString(4) ?: ""
 
-                // Ambil pemeriksaan terakhir
                 val cursorPmrk = db.rawQuery(
                     """
                     SELECT ${DatabaseHelper.COL_PMRK_TGL}, ${DatabaseHelper.COL_PMRK_BB}, 
@@ -282,7 +260,6 @@ class LaporanRepository(private val context: Context) {
                 }
                 cursorPmrk.close()
 
-                // Hitung umur
                 val umur = hitungUmurBulan(tglLahir)
 
                 dataAnak.add(mapOf(
@@ -301,7 +278,6 @@ class LaporanRepository(private val context: Context) {
             cursor.close()
             db.close()
 
-            // Generate file
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
             val fileName = "Laporan_${namaPosyandu}_${bulanDari}_${bulanSampai}_$timestamp"
 
@@ -318,9 +294,6 @@ class LaporanRepository(private val context: Context) {
         }
     }
 
-    // ═══════════════════════════════════════════════════════════
-    //  EXPORT PDF - MENGGUNAKAN ANDROID PdfDocument (NATIVE)
-    // ═══════════════════════════════════════════════════════════
     private fun exportPDF(
         data: List<Map<String, String>>,
         namaKader: String,
@@ -330,43 +303,39 @@ class LaporanRepository(private val context: Context) {
         fileName: String
     ): ExportResult {
         return try {
-            // Buat PDF menggunakan Android PdfDocument (native, tidak perlu library)
             val pdfDocument = PdfDocument()
 
-            // Page info: A4 size (595 x 842 points)
             val pageInfo = PdfDocument.PageInfo.Builder(595, 842, 1).create()
 
-            // Font paint
             val titlePaint = Paint().apply {
-                color = Color.BLACK
+                color = android.graphics.Color.BLACK
                 textSize = 18f
                 typeface = Typeface.DEFAULT_BOLD
                 textAlign = Paint.Align.CENTER
             }
 
             val headerPaint = Paint().apply {
-                color = Color.BLACK
+                color = android.graphics.Color.BLACK
                 textSize = 10f
                 typeface = Typeface.DEFAULT_BOLD
             }
 
             val textPaint = Paint().apply {
-                color = Color.BLACK
+                color = android.graphics.Color.BLACK
                 textSize = 8f
             }
 
             val linePaint = Paint().apply {
-                color = Color.GRAY
+                color = android.graphics.Color.GRAY
                 strokeWidth = 1f
             }
 
             val greenPaint = Paint().apply {
-                color = Color.rgb(46, 125, 50)
+                color = android.graphics.Color.rgb(46, 125, 50)
                 textSize = 10f
                 typeface = Typeface.DEFAULT_BOLD
             }
 
-            // Calculate pages needed
             val rowsPerPage = 35
             val totalPages = (data.size + rowsPerPage - 1) / rowsPerPage
 
@@ -376,14 +345,11 @@ class LaporanRepository(private val context: Context) {
 
                 var y = 40f
 
-                // Header - Page number
                 canvas.drawText("Halaman ${pageNum + 1} dari $totalPages", 550f, 20f, textPaint)
 
-                // Title
                 canvas.drawText("LAPORAN POSYANDU", 297f, y, titlePaint)
                 y += 25f
 
-                // Info
                 canvas.drawText("Posyandu: $namaPosyandu", 50f, y, headerPaint)
                 y += 15f
                 canvas.drawText("Kader: $namaKader", 50f, y, headerPaint)
@@ -393,39 +359,33 @@ class LaporanRepository(private val context: Context) {
                 canvas.drawText("Tanggal Cetak: ${SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date())}", 50f, y, headerPaint)
                 y += 20f
 
-                // Table header background
-                val headerBgPaint = Paint().apply { color = Color.rgb(46, 125, 50) }
+                val headerBgPaint = Paint().apply { color = android.graphics.Color.rgb(46, 125, 50) }
                 canvas.drawRect(50f, y, 545f, y + 20f, headerBgPaint)
 
-                // Table headers
                 val colX = listOf(55f, 75f, 160f, 230f, 270f, 330f, 400f, 445f, 485f, 530f)
                 val headers = listOf("No", "Nama Anak", "Tgl Lahir", "Umur", "Gender", "Ortu", "Tgl Pmrk", "BB", "TB", "Status")
 
                 headers.forEachIndexed { i, h ->
                     canvas.drawText(h, colX[i], y + 14f, Paint().apply {
-                        color = Color.WHITE
+                        color = android.graphics.Color.WHITE
                         textSize = 8f
                         typeface = Typeface.DEFAULT_BOLD
                     })
                 }
                 y += 20f
 
-                // Draw rows
                 val startIdx = pageNum * rowsPerPage
                 val endIdx = minOf(startIdx + rowsPerPage, data.size)
 
                 for (i in startIdx until endIdx) {
                     val row = data[i]
 
-                    // Alternating row background
                     if (i % 2 == 0) {
-                        canvas.drawRect(50f, y, 545f, y + 15f, Paint().apply { color = Color.rgb(245, 245, 245) })
+                        canvas.drawRect(50f, y, 545f, y + 15f, Paint().apply { color = android.graphics.Color.rgb(245, 245, 245) })
                     }
 
-                    // Border line
                     canvas.drawLine(50f, y, 545f, y, linePaint)
 
-                    // Data
                     canvas.drawText(row["no"] ?: "", colX[0], y + 11f, textPaint)
                     canvas.drawText(truncateText(row["nama"] ?: "", 12), colX[1], y + 11f, textPaint)
                     canvas.drawText(row["tgl_lahir"] ?: "", colX[2], y + 11f, textPaint)
@@ -440,10 +400,8 @@ class LaporanRepository(private val context: Context) {
                     y += 15f
                 }
 
-                // Bottom border
                 canvas.drawLine(50f, y, 545f, y, linePaint)
 
-                // Footer
                 y += 20f
                 canvas.drawText("Total Anak: ${data.size}", 50f, y, headerPaint)
                 y += 15f
@@ -452,7 +410,6 @@ class LaporanRepository(private val context: Context) {
                 pdfDocument.finishPage(page)
             }
 
-            // Save to file
             val contentValues = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, "$fileName.pdf")
                 put(MediaStore.MediaColumns.MIME_TYPE, "application/pdf")
@@ -462,7 +419,7 @@ class LaporanRepository(private val context: Context) {
             val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
                 ?: return ExportResult(false, "Gagal membuat file PDF di folder Downloads")
 
-            val os = context.contentResolver.openOutputStream(uri)
+            val os: OutputStream = context.contentResolver.openOutputStream(uri)
                 ?: return ExportResult(false, "Gagal membuka output stream untuk PDF")
             
             os.use { pdfDocument.writeTo(it) }
@@ -483,9 +440,6 @@ class LaporanRepository(private val context: Context) {
         return if (text.length > maxLength) text.substring(0, maxLength - 2) + ".." else text
     }
 
-    // ═══════════════════════════════════════════════════════════
-    //  EXPORT CSV
-    // ═══════════════════════════════════════════════════════════
     private fun exportCSV(
         data: List<Map<String, String>>,
         namaKader: String,
@@ -497,10 +451,8 @@ class LaporanRepository(private val context: Context) {
         return try {
             val csvBuilder = StringBuilder()
 
-            // BOM untuk Excel UTF-8
             csvBuilder.append('\uFEFF')
 
-            // Header
             csvBuilder.appendLine("LAPORAN POSYANDU")
             csvBuilder.appendLine("Posyandu: $namaPosyandu")
             csvBuilder.appendLine("Kader: $namaKader")
@@ -508,10 +460,8 @@ class LaporanRepository(private val context: Context) {
             csvBuilder.appendLine("Tanggal Cetak: ${SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date())}")
             csvBuilder.appendLine()
 
-            // Column headers
             csvBuilder.appendLine("No,Nama Anak,Tanggal Lahir,Umur,Jenis Kelamin,Nama Ortu,Tgl Pemeriksaan,BB (kg),TB (cm),Status Gizi")
 
-            // Data
             data.forEach { row ->
                 csvBuilder.appendLine(
                     "${row["no"]},${escapeCSV(row["nama"])},${row["tgl_lahir"]},${row["umur"]}," +
@@ -520,11 +470,9 @@ class LaporanRepository(private val context: Context) {
                 )
             }
 
-            // Summary
             csvBuilder.appendLine()
             csvBuilder.appendLine("Total Anak: ${data.size}")
 
-            // Save to Downloads
             val contentValues = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, "$fileName.csv")
                 put(MediaStore.MediaColumns.MIME_TYPE, "text/csv")
@@ -534,7 +482,7 @@ class LaporanRepository(private val context: Context) {
             val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
                 ?: return ExportResult(false, "Gagal membuat file CSV di folder Downloads")
 
-            val os = context.contentResolver.openOutputStream(uri)
+            val os: OutputStream = context.contentResolver.openOutputStream(uri)
                 ?: return ExportResult(false, "Gagal membuka output stream untuk CSV")
 
             os.use { it.write(csvBuilder.toString().toByteArray(Charsets.UTF_8)) }
@@ -553,9 +501,6 @@ class LaporanRepository(private val context: Context) {
         } else v
     }
 
-    // ═══════════════════════════════════════════════════════════
-    //  EXPORT EXCEL (XLSX menggunakan Apache POI)
-    // ═══════════════════════════════════════════════════════════
     private fun exportExcel(
         data: List<Map<String, String>>,
         namaKader: String,
@@ -565,19 +510,15 @@ class LaporanRepository(private val context: Context) {
         fileName: String
     ): ExportResult {
         return try {
-            // Check if Apache POI available
             try {
                 Class.forName("org.apache.poi.xssf.usermodel.XSSFWorkbook")
             } catch (e: Throwable) {
-                // Fallback to CSV with .xlsx extension if POI not available
                 return exportExcelFallback(data, namaKader, namaPosyandu, bulanDari, bulanSampai, fileName)
             }
 
-            // Use Apache POI for real Excel
             val workbook = org.apache.poi.xssf.usermodel.XSSFWorkbook()
             val sheet = workbook.createSheet("Laporan Posyandu")
 
-            // Styles
             val titleFont = workbook.createFont().apply {
                 bold = true
                 fontHeightInPoints = 16.toShort()
@@ -602,7 +543,6 @@ class LaporanRepository(private val context: Context) {
                 borderRight = org.apache.poi.ss.usermodel.BorderStyle.THIN
             }
 
-            // Title rows
             var rowNum = 0
             val titleRow = sheet.createRow(rowNum++)
             val titleCell = titleRow.createCell(0)
@@ -620,7 +560,6 @@ class LaporanRepository(private val context: Context) {
             infoRow4.createCell(0).setCellValue("Tanggal Cetak: ${SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date())}")
             rowNum++
 
-            // Header row
             val headers = arrayOf("No", "Nama Anak", "Tgl Lahir", "Umur", "Gender", "Nama Ortu", "Tgl Pemeriksaan", "BB (kg)", "TB (cm)", "Status Gizi")
             val headerRow = sheet.createRow(rowNum++)
             headers.forEachIndexed { i, h ->
@@ -629,7 +568,6 @@ class LaporanRepository(private val context: Context) {
                 cell.cellStyle = headerStyle
             }
 
-            // Data rows
             data.forEach { row ->
                 val dataRow = sheet.createRow(rowNum++)
                 dataRow.createCell(0).setCellValue(row["no"]?.toDoubleOrNull() ?: 0.0)
@@ -648,13 +586,11 @@ class LaporanRepository(private val context: Context) {
                 }
             }
 
-            // Summary
             rowNum++
             val summaryRow = sheet.createRow(rowNum++)
             summaryRow.createCell(0).setCellValue("Total Anak:")
             summaryRow.createCell(1).setCellValue(data.size.toDouble())
 
-            // Save
             val contentValues = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, "$fileName.xlsx")
                 put(MediaStore.MediaColumns.MIME_TYPE, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -664,7 +600,7 @@ class LaporanRepository(private val context: Context) {
             val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
                 ?: return ExportResult(false, "Gagal membuat file Excel di folder Downloads")
 
-            val os = context.contentResolver.openOutputStream(uri)
+            val os: OutputStream = context.contentResolver.openOutputStream(uri)
                 ?: return ExportResult(false, "Gagal membuka output stream untuk Excel")
 
             os.use { workbook.write(it) }
@@ -677,7 +613,6 @@ class LaporanRepository(private val context: Context) {
         }
     }
 
-    // Fallback Excel kalau Apache POI tidak tersedia
     private fun exportExcelFallback(
         data: List<Map<String, String>>,
         namaKader: String,
@@ -688,7 +623,7 @@ class LaporanRepository(private val context: Context) {
     ): ExportResult {
         return try {
             val csvBuilder = StringBuilder()
-            csvBuilder.append('\uFEFF') // BOM
+            csvBuilder.append('\uFEFF')
 
             csvBuilder.appendLine("LAPORAN POSYANDU")
             csvBuilder.appendLine("Posyandu: $namaPosyandu")
@@ -696,7 +631,6 @@ class LaporanRepository(private val context: Context) {
             csvBuilder.appendLine("Periode: $bulanDari - $bulanSampai")
             csvBuilder.appendLine()
 
-            // Tab-separated untuk Excel
             csvBuilder.appendLine("No\tNama Anak\tTgl Lahir\tUmur\tGender\tOrtu\tTgl Pemeriksaan\tBB\tTB\tStatus Gizi")
             data.forEach { row ->
                 csvBuilder.appendLine(
@@ -715,7 +649,7 @@ class LaporanRepository(private val context: Context) {
             val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
                 ?: return ExportResult(false, "Gagal membuat file Excel (fallback) di folder Downloads")
 
-            val os = context.contentResolver.openOutputStream(uri)
+            val os: OutputStream = context.contentResolver.openOutputStream(uri)
                 ?: return ExportResult(false, "Gagal membuka output stream untuk Excel (fallback)")
 
             os.use { it.write(csvBuilder.toString().toByteArray(Charsets.UTF_8)) }
@@ -726,8 +660,6 @@ class LaporanRepository(private val context: Context) {
             ExportResult(false, "Excel fallback gagal: ${t.message}")
         }
     }
-
-    // ... (existing helper methods: hitungTotalHadir, hitungTotalStunting, etc.) ...
 
     private fun hitungTotalHadir(db: android.database.sqlite.SQLiteDatabase, bulanDari: String, bulanSampai: String): Int {
         val cursor = db.rawQuery(
@@ -877,7 +809,6 @@ class LaporanRepository(private val context: Context) {
                 .add("periode_sampai", tglSampai)
                 .build()
 
-            // STEP 1: GET → dapat challenge HTML
             val res1  = httpClient.newCall(
                 Request.Builder().url(apiUrl)
                     .header("User-Agent", userAgent)
@@ -886,18 +817,14 @@ class LaporanRepository(private val context: Context) {
             ).execute()
             val body1 = res1.body?.string() ?: ""
             res1.close()
-            Log.d("SYNC_LAPORAN_API", "Step1 body: ${body1.take(100)}")
 
             if (!body1.trimStart().startsWith("[")) {
-                // STEP 2: Solve challenge + GET redirect URL
                 val challenge = parseChallenge(body1, apiUrl)
                 if (challenge == null) {
-                    Log.e("SYNC_LAPORAN_API", "Gagal parse challenge saat insert laporan")
                     return@withContext false
                 }
 
                 val cookieValue = aesDecrypt(challenge.c, challenge.a, challenge.b)
-                Log.d("SYNC_LAPORAN_API", "Cookie __test=$cookieValue")
 
                 setTestCookie("myposyandu.gt.tc", cookieValue)
 
@@ -912,12 +839,9 @@ class LaporanRepository(private val context: Context) {
                         .header("Referer", apiUrl)
                         .build()
                 ).execute()
-                val body2 = res2.body?.string() ?: ""
                 res2.close()
-                Log.d("SYNC_LAPORAN_API", "Step2 (redirect) body: ${body2.take(100)}")
             }
 
-            // STEP 3: POST data laporan
             val postResponse = httpClient.newCall(
                 Request.Builder().url(apiUrl)
                     .header("User-Agent", userAgent)
@@ -929,8 +853,6 @@ class LaporanRepository(private val context: Context) {
             val postBody = postResponse.body?.string() ?: ""
             postResponse.close()
 
-            Log.d("SYNC_LAPORAN_API", "Insert response: code=${postResponse.code}, body=$postBody")
-
             return@withContext try {
                 val json    = JSONObject(postBody)
                 val success = json.optBoolean("success", false)
@@ -941,12 +863,10 @@ class LaporanRepository(private val context: Context) {
             }
 
         } catch (e: Exception) {
-            Log.e("SYNC_LAPORAN_API", "Gagal insert laporan: ${e.message}", e)
             return@withContext false
         }
     }
 
-    // ... existing helper methods ...
     private fun hitungTanggalBatas(tglLahir: String, batasBulan: Int): String {
         return try {
             val formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy")

@@ -25,15 +25,6 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.OutputStream
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CARA PAKAI — tambahkan di dalam LazyColumn DashboardScreen, paling bawah:
-//
-//   item { Spacer(modifier = Modifier.height(16.dp)) }
-//   item {
-//       ExportDatabaseButton(modifier = Modifier.padding(horizontal = 16.dp))
-//   }
-// ─────────────────────────────────────────────────────────────────────────────
-
 @Composable
 fun ExportDatabaseButton(modifier: Modifier = Modifier) {
     val context = LocalContext.current
@@ -41,8 +32,6 @@ fun ExportDatabaseButton(modifier: Modifier = Modifier) {
     var isSuccess by remember { mutableStateOf(false) }
 
     Column(modifier = modifier.fillMaxWidth()) {
-
-        // ── Tombol utama ──────────────────────────────────────────────────────
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -71,7 +60,6 @@ fun ExportDatabaseButton(modifier: Modifier = Modifier) {
             }
         }
 
-        // ── Status setelah klik ───────────────────────────────────────────────
         if (statusMsg.isNotEmpty()) {
             Spacer(modifier = Modifier.height(8.dp))
             Box(
@@ -94,16 +82,10 @@ fun ExportDatabaseButton(modifier: Modifier = Modifier) {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// FUNGSI EXPORT
-// Mendukung Android 10+ (API 29+) via MediaStore
-// dan Android 9 ke bawah via akses langsung ke Downloads folder.
-// ─────────────────────────────────────────────────────────────────────────────
-
 data class ExportResult(val success: Boolean, val message: String)
 
 fun exportDatabase(context: Context): ExportResult {
-    val dbName    = DatabaseHelper.DATABASE_NAME          // "posyandu.db"
+    val dbName    = DatabaseHelper.DATABASE_NAME
     val dbFile    = context.getDatabasePath(dbName)
     val outName   = "posyandu_export_${System.currentTimeMillis()}.db"
 
@@ -113,7 +95,6 @@ fun exportDatabase(context: Context): ExportResult {
 
     return try {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // ── Android 10+ : gunakan MediaStore ─────────────────────────────
             val resolver = context.contentResolver
             val values   = ContentValues().apply {
                 put(MediaStore.Downloads.DISPLAY_NAME, outName)
@@ -133,7 +114,6 @@ fun exportDatabase(context: Context): ExportResult {
                         "Buka dengan DB Browser for SQLite atau SQLiteOnline.com"
             )
         } else {
-            // ── Android 9 ke bawah ────────────────────────────────────────────
             val downloadsDir = Environment.getExternalStoragePublicDirectory(
                 Environment.DIRECTORY_DOWNLOADS
             )
@@ -152,9 +132,7 @@ fun exportDatabase(context: Context): ExportResult {
     }
 }
 
-/** Copy isi file DB (tutup WAL dulu agar data konsisten) ke OutputStream. */
 private fun copyDbToStream(dbFile: File, out: OutputStream) {
-    // Flush WAL ke file utama sebelum copy
     val walFile = File(dbFile.path + "-wal")
     val shmFile = File(dbFile.path + "-shm")
 

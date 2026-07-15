@@ -218,9 +218,12 @@ fun AppNavigation() {
         }
 
         // ── ANTRIAN KADER ────────────────────────────────────────────────────
+        // FIX: AntrianKaderScreen butuh `kaderId` (bukan posyanduId langsung)
+        // supaya bisa cari posyandu_id kader yang login sendiri di dalam layar.
         composable("antrian_kader") {
             AntrianKaderScreen(
-                onNavigateBack = { navController.popBackStack() },
+                kaderId          = formViewModel.loggedInKaderId,
+                onNavigateBack   = { navController.popBackStack() },
                 onNavigateToHome = {
                     safeNavigate {
                         navController.navigate("dashboard") {
@@ -231,11 +234,6 @@ fun AppNavigation() {
                 },
                 onNavigateToPanggil = {
                     // Sudah di halaman panggil
-                },
-                onNavigateToLaporan = {
-                    safeNavigate {
-                        navController.navigate("laporan") { launchSingleTop = true }
-                    }
                 },
                 onNavigateToLogout = {
                     formViewModel.loggedInOrangTuaUsername = ""

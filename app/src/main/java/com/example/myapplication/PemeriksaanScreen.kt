@@ -44,9 +44,6 @@ import kotlin.math.roundToInt
 import android.util.Log
 import kotlinx.coroutines.launch
 
-// ─────────────────────────────────────────────────────────────
-//  Design tokens
-// ─────────────────────────────────────────────────────────────
 private val TabActiveBg      = Color(0xFF1E6B4E)
 private val TabActiveText    = TextWhite
 private val TabIdleBg        = Color(0xFF3A3A3A)
@@ -55,7 +52,6 @@ private val WHOCardBg        = Color(0xFF2A2A2A)
 private val WHOCardBorder    = Color(0xFF3A3A3A)
 private val ProgressTrackWHO = Color(0xFF444444)
 
-// Status colors
 private val StatusNormalBg      = Color(0xFFB8EDD8)
 private val StatusNormalText    = Color(0xFF1E6B4E)
 private val StatusWarnBg        = Color(0xFFFFF3CD)
@@ -66,16 +62,11 @@ private val StatusProgressGreen  = Color(0xFF3DB89C)
 private val StatusProgressYellow = Color(0xFFF5A623)
 private val StatusProgressRed    = Color(0xFFE74C3C)
 
-// Chart colors
 private val ChartColorMedian = Color(0xFF3DB89C)
 private val ChartColorSD2    = Color(0xFFF5A623)
 private val ChartColorSD3    = Color(0xFFE74C3C)
 private val ChartColorAnak   = Color(0xFFFF6B6B)
 private val ChartGridColor   = Color(0xFF3A3A3A)
-
-// ════════════════════════════════════════════════════════════
-//  Z-SCORE WHO CALCULATION
-// ════════════════════════════════════════════════════════════
 
 data class HasilAnalisis(
     val zScoreTBU : Double,
@@ -98,10 +89,6 @@ fun statusToProgressColor(warna: StatusWarna) = when (warna) {
     StatusWarna.DANGER -> StatusProgressRed
 }
 
-// ════════════════════════════════════════════════════════════
-//  SCREEN
-// ════════════════════════════════════════════════════════════
-
 @Composable
 fun PemeriksaanScreen(
     anakId         : String   = "",
@@ -115,7 +102,6 @@ fun PemeriksaanScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // Fallback kaderId dari DB kalau kosong
     val kaderIdEffect = remember { mutableStateOf(kaderId) }
     LaunchedEffect(kaderId) {
         if (kaderId.isBlank()) {
@@ -126,13 +112,11 @@ fun PemeriksaanScreen(
             )
             if (cursor.moveToFirst()) {
                 kaderIdEffect.value = cursor.getString(0) ?: ""
-                Log.d("PEMERIKSAAN_DEBUG", "kaderId fallback dari DB: ${kaderIdEffect.value}")
             }
             cursor.close()
             db.close()
         } else {
             kaderIdEffect.value = kaderId
-            Log.d("PEMERIKSAAN_DEBUG", "kaderId dari param: $kaderId")
         }
     }
 
@@ -202,13 +186,9 @@ fun PemeriksaanScreen(
                                 activeTab    = 1
                                 onSimpan(beratBadan, tinggiBadan, analisis)
 
-                                // ── Simpan ke tabel pemeriksaan ──────────────────
                                 val repo = PemeriksaanRepository(context)
                                 val kaderIdFinal = kaderIdEffect.value
 
-                                Log.d("PEMERIKSAAN_DEBUG", "Insert dengan kaderId=$kaderIdFinal, anakId=$anakId, tgl=$tanggal")
-
-                                // Map statusBBU ke nilai yang diterima DB CHECK constraint
                                 val statusGiziDb = when (analisis.statusBBU.lowercase().trim()) {
                                     "gizi buruk"                    -> "gizi_buruk"
                                     "gizi kurang"                   -> "gizi_kurang"
@@ -217,7 +197,7 @@ fun PemeriksaanScreen(
                                     else                            -> "normal"
                                 }
 
-                                val result = repo.insertPemeriksaan(
+                                repo.insertPemeriksaan(
                                     id         = java.util.UUID.randomUUID().toString(),
                                     anakId     = anakId,
                                     kaderId    = kaderIdFinal,
@@ -231,15 +211,12 @@ fun PemeriksaanScreen(
                                     statusGizi = statusGiziDb,
                                     catatan    = ""
                                 )
-                                Log.d("PEMERIKSAAN_DEBUG", "Insert result=$result")
 
-                                // ── SYNC KE API ──────────────────────────────────
                                 scope.launch {
                                     try {
-                                        val resultSync = syncPemeriksaanToApi(context)
-                                        Log.d("SYNC_PMRK", resultSync.message)
+                                        syncPemeriksaanToApi(context)
                                     } catch (e: Exception) {
-                                        Log.e("SYNC_PMRK", "Gagal sync: ${e.message}", e)
+                                        Log.e("SYNC_PMRK", "Gagal sync: ${e.message}")
                                     }
                                 }
                             }
@@ -267,10 +244,6 @@ fun PemeriksaanScreen(
         }
     }
 }
-
-// ════════════════════════════════════════════════════════════
-//  TAB 0 — INPUT
-// ════════════════════════════════════════════════════════════
 
 @Composable
 private fun TabInputContent(
@@ -329,10 +302,6 @@ private fun TabInputContent(
     }
 }
 
-// ════════════════════════════════════════════════════════════
-//  TAB 1 — HASIL
-// ════════════════════════════════════════════════════════════
-
 @Composable
 private fun TabHasilContent(
     namaAnak : String,
@@ -368,7 +337,6 @@ private fun TabHasilContent(
     ) {
         Spacer(modifier = Modifier.height(16.dp))
 
-        // ── Summary card ──────────────────────────────────────
         val overallWarna = if (hasil.warnasTBU == StatusWarna.DANGER || hasil.warnasBBU == StatusWarna.DANGER)
             StatusWarna.DANGER
         else if (hasil.warnasTBU == StatusWarna.WARN || hasil.warnasBBU == StatusWarna.WARN)
@@ -428,7 +396,6 @@ private fun TabHasilContent(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // ── Indikator WHO card ────────────────────────────────
         Box(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
@@ -441,7 +408,6 @@ private fun TabHasilContent(
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text(text = "Indikator WHO", color = TextWhite, fontSize = 13.sp, fontWeight = FontWeight.Bold)
 
-                // ▸ Label dinamis: "TB/U - <status>"
                 WHOIndicatorBlock(
                     title       = "TB/U - ${hasil.statusTBU}",
                     zScore      = "Z-Score: ${hasil.zScoreTBU}",
@@ -453,7 +419,6 @@ private fun TabHasilContent(
 
                 Divider(color = WHOCardBorder, thickness = 0.8.dp)
 
-                // ▸ Label dinamis: "BB/U - <status>"
                 WHOIndicatorBlock(
                     title       = "BB/U - ${hasil.statusBBU}",
                     zScore      = "Z-Score: ${hasil.zScoreBBU}",
@@ -465,7 +430,6 @@ private fun TabHasilContent(
 
                 Divider(color = WHOCardBorder, thickness = 0.8.dp)
 
-                // Keterangan skala Z-Score
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(text = "Keterangan Skala Z-Score WHO", color = TextGrey, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     Text(text = "< -3.0  : Sangat Pendek / Gizi Buruk", color = StatusDangerText, fontSize = 11.sp)
@@ -539,10 +503,6 @@ private fun WHOIndicatorBlock(
     }
 }
 
-// ════════════════════════════════════════════════════════════
-//  TAB 2 — GRAFIK TB/U
-// ════════════════════════════════════════════════════════════
-
 @Composable
 private fun TabGrafikTBUContent(
     namaAnak    : String,
@@ -586,10 +546,6 @@ private fun TabGrafikTBUContent(
         Spacer(modifier = Modifier.height(16.dp))
     }
 }
-
-// ════════════════════════════════════════════════════════════
-//  TAB 3 — GRAFIK BB/U
-// ════════════════════════════════════════════════════════════
 
 @Composable
 private fun TabGrafikBBUContent(
@@ -636,10 +592,6 @@ private fun TabGrafikBBUContent(
     }
 }
 
-// ════════════════════════════════════════════════════════════
-//  LINE CHART — Grafik Garis WHO
-// ════════════════════════════════════════════════════════════
-
 @Composable
 private fun GrafikLineCard(
     judul       : String,
@@ -660,7 +612,6 @@ private fun GrafikLineCard(
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(text = judul, color = TextWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold)
 
-            // Legenda
             Row(
                 modifier              = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -671,7 +622,6 @@ private fun GrafikLineCard(
                 if (nilaiAnak != null) LegendaDot(color = ChartColorAnak, label = namaAnak)
             }
 
-            // Siapkan data series
             val keys = tabel.keys.sorted()
             val minAge = keys.first().toFloat()
             val maxAge = keys.last().toFloat()
@@ -701,7 +651,6 @@ private fun GrafikLineCard(
                 val w = size.width
                 val h = size.height
 
-                // Grid horizontal
                 val gridStep = if ((maxY - minY) > 50) 20f else if ((maxY - minY) > 20) 10f else 5f
                 var gridVal = (minY / gridStep).toInt() * gridStep
                 while (gridVal <= maxY) {
@@ -715,7 +664,6 @@ private fun GrafikLineCard(
                     gridVal += gridStep
                 }
 
-                // Grid vertikal
                 keys.forEach { bulan ->
                     val gx = (bulan - minAge) / (maxAge - minAge) * w
                     drawLine(
@@ -758,19 +706,16 @@ private fun GrafikLineCard(
                     }
                 }
 
-                // Garis ±3 SD
                 val lineNeg3 = keys.map { b -> toOffset(b.toFloat(), (tabel[b]!!.first - tabel[b]!!.second * 3).toFloat(), w, h) }
                 val linePos3 = keys.map { b -> toOffset(b.toFloat(), (tabel[b]!!.first + tabel[b]!!.second * 3).toFloat(), w, h) }
                 drawLinePath(lineNeg3, ChartColorSD3.copy(alpha = 0.7f), 1.5f, dashed = true)
                 drawLinePath(linePos3, ChartColorSD3.copy(alpha = 0.7f), 1.5f, dashed = true)
 
-                // Garis ±2 SD
                 val lineNeg2 = keys.map { b -> toOffset(b.toFloat(), (tabel[b]!!.first - tabel[b]!!.second * 2).toFloat(), w, h) }
                 val linePos2 = keys.map { b -> toOffset(b.toFloat(), (tabel[b]!!.first + tabel[b]!!.second * 2).toFloat(), w, h) }
                 drawLinePath(lineNeg2, ChartColorSD2.copy(alpha = 0.8f), 1.5f, dashed = true)
                 drawLinePath(linePos2, ChartColorSD2.copy(alpha = 0.8f), 1.5f, dashed = true)
 
-                // Area fill
                 val areaPath = Path().apply {
                     moveTo(lineNeg2[0].x, lineNeg2[0].y)
                     lineNeg2.drop(1).forEach { lineTo(it.x, it.y) }
@@ -782,11 +727,9 @@ private fun GrafikLineCard(
                     color = ChartColorMedian.copy(alpha = 0.08f)
                 )
 
-                // Garis median
                 val lineMedian = keys.map { b -> toOffset(b.toFloat(), tabel[b]!!.first.toFloat(), w, h) }
                 drawLinePath(lineMedian, ChartColorMedian, 2.5f, dashed = false)
 
-                // Titik anak
                 if (nilaiAnak != null) {
                     val (medAtAge, sdAtAge) = interpolasi(umurBulan, tabel)
                     val nilaiAbs = medAtAge + nilaiAnak * sdAtAge
@@ -824,7 +767,6 @@ private fun GrafikLineCard(
                 }
             }
 
-            // Label sumbu X
             Row(
                 modifier              = Modifier
                     .fillMaxWidth()
@@ -892,10 +834,6 @@ private fun LegendaDot(color: Color, label: String) {
         Text(text = label, color = TextGrey, fontSize = 10.sp)
     }
 }
-
-// ─────────────────────────────────────────────────────────────
-//  Keterangan status card (bawah grafik)
-// ─────────────────────────────────────────────────────────────
 
 @Composable
 private fun KeteranganStatusCard(
@@ -970,10 +908,6 @@ private fun KeteranganStatusCard(
         }
     }
 }
-
-// ════════════════════════════════════════════════════════════
-//  SHARED COMPOSABLES
-// ════════════════════════════════════════════════════════════
 
 @Composable
 fun HeaderProfilAnak(

@@ -86,7 +86,6 @@ fun DaftarAnakBaruScreen(
                     errorJenis = false
                     jenisInvalid = false
                 } else {
-                    // Jika user maksa ketik karakter lain, biarkan tapi set error
                     jenisKelamin = input
                     jenisInvalid = true
                 }
@@ -157,10 +156,6 @@ fun DaftarAnakBaruScreen(
     }
 }
 
-// ─────────────────────────────────────────────
-// Header
-// ─────────────────────────────────────────────
-
 @Composable
 fun DaftarAnakHeader(
     dariKonfirmasi: Boolean = false,
@@ -208,10 +203,6 @@ fun DaftarAnakHeader(
     }
 }
 
-// ─────────────────────────────────────────────
-// Form Identitas
-// ─────────────────────────────────────────────
-
 @Composable
 fun FormIdentitas(
     namaLengkap    : String,
@@ -234,12 +225,10 @@ fun FormIdentitas(
     val context  = LocalContext.current
     val calendar = Calendar.getInstance()
 
-    // DatePickerDialog — muncul saat kolom tanggal diklik
     val datePickerDialog = remember {
         DatePickerDialog(
             context,
             { _, year, month, dayOfMonth ->
-                // Format hasil jadi "dd/MM/yyyy"
                 val d = dayOfMonth.toString().padStart(2, '0')
                 val m = (month + 1).toString().padStart(2, '0')
                 onTanggalChange("$d/$m/$year")
@@ -288,7 +277,6 @@ fun FormIdentitas(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment     = Alignment.Top
             ) {
-                // Kolom tanggal lahir — tidak bisa diketik, klik buka DatePicker
                 Column(
                     modifier            = Modifier.weight(1.6f),
                     verticalArrangement = Arrangement.spacedBy(3.dp)
@@ -351,10 +339,6 @@ fun FormIdentitas(
     }
 }
 
-// ─────────────────────────────────────────────
-// Form Field Generic
-// ─────────────────────────────────────────────
-
 @Composable
 fun FormField(
     label        : String,
@@ -412,10 +396,6 @@ fun FormField(
     }
 }
 
-// ─────────────────────────────────────────────
-// Tombol
-// ─────────────────────────────────────────────
-
 @Composable
 fun HubungkanButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
@@ -456,10 +436,6 @@ fun SelesaiDaftarButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
         )
     }
 }
-
-// ─────────────────────────────────────────────
-// Preview
-// ─────────────────────────────────────────────
 
 @Preview(showBackground = true, showSystemUi = true, backgroundColor = 0xFF121212)
 @Composable

@@ -40,6 +40,7 @@ private val AntTextWhite         = Color(0xFFFFFFFF)
 private val AntTextGrey          = Color(0xFF888888)
 private val AntAvatarMint        = Color(0xFF98E6C8)
 private val AntNeonGreen         = Color(0xFF00C896)
+private val AntNeonAmber         = Color(0xFFFFC947)
 private val AntButtonBlue        = Color(0xFF1964A3)
 
 data class AnakAntrianData(
@@ -47,7 +48,9 @@ data class AnakAntrianData(
     val nama              : String,
     val umurBulan         : Int,
     val nomorAntrian      : String? = null,
-    val sudahAmbilAntrian : Boolean = false
+    val sudahAmbilAntrian : Boolean = false,
+    // BARU: berapa orang yang masih menunggu di depan nomor anak ini
+    val orangDiDepan      : Int? = null
 )
 
 @Composable
@@ -70,6 +73,10 @@ fun AntrianOrtuScreen(
     var statusMessage    by remember { mutableStateOf("") }
     var errorMessage     by remember { mutableStateOf("") }
     var showLogoutDialog by remember { mutableStateOf(false) }
+
+    // BARU: nomor yang sedang dilayani sekarang (dipakai di header, gaya
+    // "papan display" rumah sakit) — 0 kalau belum ada yang dipanggil.
+    var nomorSedangDilayani by remember { mutableStateOf(0) }
 
     // ── Fungsi load data ────────────────────────────────────────────────────
     suspend fun loadData() {
@@ -148,8 +155,10 @@ fun AntrianOrtuScreen(
                 AntrianApiService.getAntrianItems(context, antrianAktif.id)
             else emptyList()
 
-            // FIX: Map anak_id → item milik userId yang masih menunggu (status=1)
-            // Jika status sudah 0 (dipanggil) atau 2 (tidak hadir), anggap sudah selesai → reset ke "Ambil antrian"
+            // BARU: update nomor yang sedang dilayani buat header
+            nomorSedangDilayani = antrianAktif?.nomorSaatIni ?: 0
+
+            // Map anak_id → item milik userId yang masih menunggu (status=1)
             val itemMenungguByAnak = antrianItemsHariIni
                 .filter { it.ortuId == userId && it.status == 1 }
                 .associateBy { it.anakId }
@@ -165,7 +174,7 @@ fun AntrianOrtuScreen(
                             "WHERE a.${DatabaseHelper.COL_ANT_TANGGAL} = ? " +
                             "  AND ai.${DatabaseHelper.COL_ANTITEM_ANAK_ID} = ? " +
                             "  AND ai.${DatabaseHelper.COL_ANTITEM_ORTU_ID} = ? " +
-                            "  AND ai.${DatabaseHelper.COL_ANTITEM_STATUS} = 1 " +  // FIX: hanya status menunggu
+                            "  AND ai.${DatabaseHelper.COL_ANTITEM_STATUS} = 1 " +
                             "LIMIT 1",
                     arrayOf(today, anakId, userId)
                 )
@@ -191,21 +200,22 @@ fun AntrianOrtuScreen(
                 val tglLahir = cursorAnak.getString(2) ?: ""
                 val umur     = hitungUmurBulanAntrian(tglLahir)
 
-                // Cek antrian dari API dulu, fallback ke lokal
-                val itemApi    = itemMenungguByAnak[id]
-                val nomor      = itemApi?.nomor ?: getNomorLokal(id)
+                val itemApi = itemMenungguByAnak[id]
+                val nomor   = itemApi?.nomor ?: getNomorLokal(id)
 
-                // FIX: sudahAmbil hanya true jika masih menunggu (status=1)
-                // Jika dipanggil/tidak hadir, balik ke tampilan "Ambil antrian"
                 val sudahAmbil = nomor != null
-                val nomorStr   = nomor?.toString()?.padStart(3, '0')
+                val nomorStr   = nomor?.let { formatNomorAntrian(it) }
+
+                // BARU: hitung berapa orang yang masih menunggu di depan nomor ini
+                val orangDiDepan = nomor?.let { hitungOrangDiDepan(antrianItemsHariIni, it) }
 
                 newList.add(AnakAntrianData(
                     id                = id,
                     nama              = nama,
                     umurBulan         = umur,
                     nomorAntrian      = nomorStr,
-                    sudahAmbilAntrian = sudahAmbil
+                    sudahAmbilAntrian = sudahAmbil,
+                    orangDiDepan      = orangDiDepan
                 ))
             }
             cursorAnak.close()
@@ -226,12 +236,13 @@ fun AntrianOrtuScreen(
         loadData()
     }
 
-    // ── FIX: Polling otomatis setiap 10 detik untuk sync status dari kader ─
-    // Ini yang membuat UI ortu berubah otomatis saat kader panggil/tidak hadir
+    // ── Polling otomatis buat sync nomor sedang dilayani + status ──────────
+    // Interval dipercepat jadi 8 detik biar terasa "hidup" kayak papan
+    // display rumah sakit, dan tetap jalan kalau ada anak yang sedang
+    // menunggu, supaya baterai/network nggak boros pas nggak ada antrian.
     LaunchedEffect(userId) {
         while (true) {
-            delay(10_000L)  // 10 detik
-            // Hanya refresh jika ada anak yang masih menunggu
+            delay(8_000L)
             if (anakList.any { it.sudahAmbilAntrian }) {
                 try {
                     loadData()
@@ -327,6 +338,12 @@ fun AntrianOrtuScreen(
                 onBack       = onNavigateBack
             )
 
+            // BARU: papan "sedang dilayani" gaya rumah sakit, tampil kalau
+            // ada anak yang sedang antre hari ini.
+            if (anakList.any { it.sudahAmbilAntrian }) {
+                PapanSedangDilayani(nomor = nomorSedangDilayani)
+            }
+
             Text(
                 text       = "Anak saya",
                 color      = AntTextWhite,
@@ -380,6 +397,7 @@ fun AntrianOrtuScreen(
                                     nama         = anak.nama,
                                     usia         = "${anak.umurBulan} Bulan",
                                     nomorAntrian = anak.nomorAntrian,
+                                    orangDiDepan = anak.orangDiDepan ?: 0,
                                     onClick      = onNavigateToTicket
                                 )
                             } else {
@@ -417,7 +435,6 @@ fun AntrianOrtuScreen(
                 }
             }
 
-            // FIX: Tombol refresh manual agar ortu bisa sync status kapan saja
             TextButton(
                 onClick  = { scope.launch { loadData() } },
                 modifier = Modifier
@@ -455,6 +472,36 @@ private fun hitungUmurBulanAntrian(tanggalLahir: String): Int {
     } catch (e: Exception) {
         android.util.Log.e("AntrianOrtu", "Gagal hitung umur: $tanggalLahir", e)
         0
+    }
+}
+
+// BARU: papan kecil "SEDANG DILAYANI" di atas daftar anak, mirip layar
+// LED di ruang tunggu rumah sakit.
+@Composable
+private fun PapanSedangDilayani(nomor: Int) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color(0xFF0D0D0D))
+            .border(1.dp, AntSurfaceDarkBorder, RoundedCornerShape(14.dp))
+            .padding(vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text       = "SEDANG DILAYANI",
+            color      = AntTextGrey,
+            fontSize   = 12.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text       = if (nomor > 0) formatNomorAntrian(nomor) else "—",
+            color      = AntNeonGreen,
+            fontSize   = 48.sp,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 
@@ -551,14 +598,20 @@ private fun CardAntrianAktif(
     nama        : String,
     usia        : String,
     nomorAntrian: String,
+    orangDiDepan: Int = 0,
     onClick     : () -> Unit = {}
 ) {
+    // BARU: kalau 0 orang di depan, berarti giliran sudah dekat/tiba —
+    // kasih warna beda (amber) biar ortu langsung sadar harus siap-siap.
+    val isSegera = orangDiDepan <= 0
+    val aksenColor = if (isSegera) AntNeonAmber else AntNeonGreen
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(AntSurfaceDark)
-            .border(2.dp, AntNeonGreen, RoundedCornerShape(12.dp))
+            .border(2.dp, aksenColor, RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
             .padding(12.dp)
     ) {
@@ -576,8 +629,8 @@ private fun CardAntrianAktif(
                 }
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text(nomorAntrian, color = AntNeonGreen, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-                Text("Antrian Anda", color = AntNeonGreen.copy(alpha = 0.8f), fontSize = 12.sp)
+                Text(nomorAntrian, color = aksenColor, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                Text("Antrian Anda", color = aksenColor.copy(alpha = 0.8f), fontSize = 12.sp)
             }
         }
         Spacer(modifier = Modifier.height(12.dp))
@@ -585,13 +638,17 @@ private fun CardAntrianAktif(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(8.dp))
-                .background(AntNeonGreen)
+                .background(aksenColor)
                 .padding(vertical = 8.dp, horizontal = 12.dp),
             contentAlignment = Alignment.CenterStart
         ) {
+            // BARU: pesan dinamis sesuai posisi antrian, bukan cuma "Menunggu"
             Text(
-                text       = "Status : Menunggu",
-                color      = AntTextWhite,
+                text = if (isSegera)
+                    "Segera giliran Anda — mohon bersiap"
+                else
+                    "Menunggu — masih ada $orangDiDepan orang di depan Anda",
+                color      = Color(0xFF12261F),
                 fontSize   = 14.sp,
                 fontWeight = FontWeight.Bold
             )

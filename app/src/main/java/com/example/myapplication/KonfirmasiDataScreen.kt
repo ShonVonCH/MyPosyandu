@@ -56,7 +56,6 @@ fun KonfirmasiDataScreen(
     val anak    = viewModel.formAnak
     val ortu    = viewModel.formOrangTua
 
-    // State untuk status sync
     var syncStatus by remember { mutableStateOf("") }
     var isSyncing by remember { mutableStateOf(false) }
 
@@ -97,12 +96,9 @@ fun KonfirmasiDataScreen(
                 val dbHelper  = DatabaseHelper(context)
                 val db        = dbHelper.writableDatabase
 
-                // Format created_at: yyyy-MM-dd HH:mm:ss
                 val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
                 val createdAt = sdf.format(Date())
 
-                // 1. Simpan akun ortu ke SQLite lokal HANYA jika belum ada,
-                //    pakai db instance yang SAMA agar tidak ada race condition
                 val cursorCek = db.rawQuery(
                     "SELECT ${DatabaseHelper.COL_ORTU_ID} FROM ${DatabaseHelper.TABLE_ORTU} " +
                             "WHERE ${DatabaseHelper.COL_ORTU_USERNAME} = ? LIMIT 1",
@@ -113,11 +109,8 @@ fun KonfirmasiDataScreen(
 
                 val ortuId: String
                 if (existingOrtuId.isNotBlank()) {
-                    // Sudah ada, pakai ID yang existing
                     ortuId = existingOrtuId
-                    android.util.Log.d("KonfirmasiData", "Ortu sudah ada, pakai id=$ortuId")
                 } else {
-                    // Belum ada, generate UUID dan insert langsung via db yang sama
                     val newOrtuId = java.util.UUID.randomUUID().toString()
                     val posyanduCursorOrtu = db.rawQuery(
                         "SELECT ${DatabaseHelper.COL_USERS_POSYANDU_ID} FROM ${DatabaseHelper.TABLE_USERS} LIMIT 1",
@@ -140,12 +133,9 @@ fun KonfirmasiDataScreen(
                         android.database.sqlite.SQLiteDatabase.CONFLICT_IGNORE
                     )
                     ortuId = newOrtuId
-                    android.util.Log.d("KonfirmasiData", "Ortu baru diinsert id=$ortuId")
                 }
 
-                // 3. Insert anak ke tabel anak
                 if (ortuId.isNotBlank() && anak.namaLengkap.isNotBlank()) {
-                    // ID anak selalu UUID — NIK disimpan terpisah, bukan sebagai primary key
                     val anakId = anak.nik
                     val posyanduCursor = db.rawQuery(
                         "SELECT ${DatabaseHelper.COL_USERS_POSYANDU_ID} FROM ${DatabaseHelper.TABLE_USERS} LIMIT 1",
@@ -169,35 +159,23 @@ fun KonfirmasiDataScreen(
                         anakValues,
                         android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE
                     )
-                    android.util.Log.d("KonfirmasiData",
-                        "Anak '${anak.namaLengkap}' disimpan id=$anakId ortuId=$ortuId")
                 }
                 db.close()
 
-                // 4. Update in-memory state
                 viewModel.simpanAnak()
 
-                // 5. SYNC KE API — Insert ortu dan anak yang belum ada di database API
                 isSyncing = true
                 syncStatus = "Mengsinkronkan ke server..."
 
                 scope.launch {
                     try {
-                        // Sync ortu dulu
                         val resultOrtu = syncOrtuToApi(context)
-                        android.util.Log.d("SYNC_ORTU", resultOrtu.message)
-
-                        // Lalu sync anak
                         val resultAnak = syncAnakToApi(context)
-                        android.util.Log.d("SYNC_ANAK", resultAnak.message)
-
                         syncStatus = resultOrtu.message + " | " + resultAnak.message
                     } catch (e: Exception) {
                         syncStatus = "Sync gagal: ${e.message}"
-                        android.util.Log.e("SYNC", "Error: ${e.message}", e)
                     } finally {
                         isSyncing = false
-                        // Navigate setelah sync selesai
                         onSimpanClicked()
                     }
                 }
@@ -205,7 +183,6 @@ fun KonfirmasiDataScreen(
             modifier = Modifier.padding(horizontal = 16.dp)
         )
 
-        // Tampilkan status sync
         if (isSyncing || syncStatus.isNotEmpty()) {
             Spacer(modifier = Modifier.height(8.dp))
             val isSuccess = !syncStatus.contains("gagal", ignoreCase = true) &&
