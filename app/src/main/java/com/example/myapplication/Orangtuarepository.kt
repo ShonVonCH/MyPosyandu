@@ -17,7 +17,7 @@ class OrangTuaRepository(context: Context) {
         val noHpOrtu     : String,
         val passOrtu     : String,
         val namaAnak     : String?,
-        val nikAnak      : String?,   // = anak.id
+        val nikAnak      : String?,
         val tglLahirAnak : String?,
         val genderAnak   : String?,
         val alamatAnak   : String?
@@ -31,9 +31,7 @@ class OrangTuaRepository(context: Context) {
         val jumlahAnak  : Int
     )
 
-    // ── READ ──────────────────────────────────────────────────────
 
-    /** Semua ortu dengan jumlah anak masing-masing */
     fun getAllOrtu(): List<OrtuSummary> {
         val db     = dbHelper.readableDatabase
         val result = mutableListOf<OrtuSummary>()

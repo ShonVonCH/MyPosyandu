@@ -28,21 +28,6 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-// ═════════════════════════════════════════════════════════════════════
-//  LAYAR KADER — "loket panggil" gaya rumah sakit.
-//  Kader manggil nomor berurutan dari yang terkecil, atau tandai
-//  "tidak hadir" kalau orangnya tidak muncul saat dipanggil.
-//
-//  FIX: signature disesuaikan dengan pemanggilan di MainActivity —
-//  yang tersedia di sana cuma `kaderId` (dari formViewModel), bukan
-//  posyanduId langsung, jadi posyanduId dicari sendiri di dalam layar
-//  ini (sama seperti pola getPosyanduIdForUser di AntrianApiService).
-//  Ditambah bottom nav (Home / Panggil / Laporan / Logout) supaya
-//  konsisten dengan layar lain dan cocok dengan callback yang dikirim
-//  MainActivity (onNavigateToHome, onNavigateToPanggil, onNavigateToLaporan,
-//  onNavigateToLogout).
-// ═════════════════════════════════════════════════════════════════════
-
 private val KaderBlue        = Color(0xFF1964A3)
 private val KaderBackground  = Color(0xFF121212)
 private val KaderSurface     = Color(0xFF2A2A2A)

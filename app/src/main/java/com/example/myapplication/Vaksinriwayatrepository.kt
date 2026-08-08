@@ -29,7 +29,6 @@ class VaksinRiwayatRepository(context: Context) {
 
     // ── READ vaksin_referensi ─────────────────────────────────
 
-    /** Semua vaksin dari referensi */
     fun getAllVaksinRef(): List<VaksinRefRow> {
         val db     = dbHelper.readableDatabase
         val result = mutableListOf<VaksinRefRow>()
@@ -48,7 +47,6 @@ class VaksinRiwayatRepository(context: Context) {
         return result
     }
 
-    /** Vaksin yang usia_bulan <= umurAnak (sudah waktunya) */
     fun getVaksinSudahWaktunya(umurBulan: Int): List<VaksinRefRow> {
         val db     = dbHelper.readableDatabase
         val result = mutableListOf<VaksinRefRow>()
@@ -70,7 +68,6 @@ class VaksinRiwayatRepository(context: Context) {
         return result
     }
 
-    /** Vaksin yang usia_bulan > umurAnak (akan datang) */
     fun getVaksinAkanDatang(umurBulan: Int): List<VaksinRefRow> {
         val db     = dbHelper.readableDatabase
         val result = mutableListOf<VaksinRefRow>()
@@ -94,7 +91,6 @@ class VaksinRiwayatRepository(context: Context) {
 
     // ── READ vaksin_riwayat ───────────────────────────────────
 
-    /** Set vaksin_ref_id yang sudah diberikan ke anak */
     fun getVaksinSudahDiberikan(anakId: String): Set<String> {
         val db     = dbHelper.readableDatabase
         val result = mutableSetOf<String>()
@@ -117,7 +113,6 @@ class VaksinRiwayatRepository(context: Context) {
         return result
     }
 
-    /** Detail riwayat (termasuk tanggal) per anak */
     fun getRiwayatByAnak(anakId: String): List<VaksinRiwayatRow> {
         val db     = dbHelper.readableDatabase
         val result = mutableListOf<VaksinRiwayatRow>()
@@ -140,7 +135,6 @@ class VaksinRiwayatRepository(context: Context) {
 
     // ── READ alamat posyandu ──────────────────────────────────
 
-    /** Ambil alamat posyandu dari user yang sedang login */
     fun getAlamatPosyandu(): String {
         val db = dbHelper.readableDatabase
         var cursor: Cursor? = null

@@ -58,11 +58,6 @@ private val VakBadgeRedBg        = Color(0xFF5C2C2C)
 private val VakBadgeRedText      = Color(0xFFE55B5B)
 private val VakIconGreen         = Color(0xFF1E8F6A)
 
-// ── Data class lokal (hanya untuk UI layer ini) ──
-// CATATAN: Jika VaksinRef, RiwayatVaksin, DatabaseHelper sudah ada
-// di file lain (misal DatabaseHelper.kt / VaksinRepository.kt),
-// HAPUS blok di bawah ini dan pastikan import-nya sudah benar.
-
 private data class VaksinOrtuGroup(
     val usia: String,
     val statusLengkap: Boolean,

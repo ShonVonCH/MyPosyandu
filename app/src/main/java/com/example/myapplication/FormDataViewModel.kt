@@ -52,10 +52,7 @@ class FormDataViewModel : ViewModel() {
     val akunPasswordMap    = mutableMapOf<String, String>()
     val registeredAnakList = mutableStateListOf<RegisteredAnakEntry>()
 
-    /**
-     * Dipanggil dari KonfirmasiDataScreen setelah SQLite berhasil di-insert.
-     * Update state UI in-memory agar Dashboard & DataAnak langsung reflect data baru.
-     */
+
     fun simpanAnak() {
         lastSavedAnak     = formAnak
         lastSavedOrangTua = formOrangTua
@@ -80,10 +77,6 @@ class FormDataViewModel : ViewModel() {
         formOrangTua = FormOrangTuaData()
     }
 
-    /**
-     * Tambah akun ortu baru ke in-memory list.
-     * Dipanggil dari HubungOrangTuaScreen saat method = "new".
-     */
     fun tambahAkunOrangTua(nama: String, username: String, noHp: String, password: String) {
         // Hindari duplikat
         if (akunOrangTuaList.none { it.username == username }) {
@@ -98,10 +91,6 @@ class FormDataViewModel : ViewModel() {
         )
     }
 
-    /**
-     * Sync akun ortu dari SQLite ke in-memory list.
-     * Dipanggil setelah login agar CariAkunCard dan dashboard mencerminkan data DB.
-     */
     fun syncAkunOrangTuaFromDb(list: List<OrangTuaRepository.OrtuSummary>) {
         akunOrangTuaList.clear()
         list.forEach { ortu ->
@@ -118,10 +107,6 @@ class FormDataViewModel : ViewModel() {
         }
     }
 
-    /**
-     * Sync anak terdaftar dari SQLite ke in-memory list.
-     * Dipanggil setelah login agar DataAnak & Dashboard tidak kosong.
-     */
     fun syncAnakFromDb(list: List<OrangTuaRepository.OrangTuaAnakRow>) {
         registeredAnakList.clear()
         list.forEach { row ->

@@ -475,8 +475,6 @@ private fun hitungUmurBulanAntrian(tanggalLahir: String): Int {
     }
 }
 
-// BARU: papan kecil "SEDANG DILAYANI" di atas daftar anak, mirip layar
-// LED di ruang tunggu rumah sakit.
 @Composable
 private fun PapanSedangDilayani(nomor: Int) {
     Column(
@@ -601,8 +599,6 @@ private fun CardAntrianAktif(
     orangDiDepan: Int = 0,
     onClick     : () -> Unit = {}
 ) {
-    // BARU: kalau 0 orang di depan, berarti giliran sudah dekat/tiba —
-    // kasih warna beda (amber) biar ortu langsung sadar harus siap-siap.
     val isSegera = orangDiDepan <= 0
     val aksenColor = if (isSegera) AntNeonAmber else AntNeonGreen
 

@@ -4,13 +4,6 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.Cursor
 
-/**
- * DEPRECATED: Tabel imunisasi sudah tidak ada di database versi 13.
- * Digantikan oleh VaksinRiwayatRepository yang menggunakan tabel vaksin_riwayat.
- *
- * File ini dipertahankan untuk kompatibilitas backward, tapi semua operasi
- * diarahkan ke VaksinRiwayatRepository.
- */
 class ImunisasiRepository(context: Context) {
 
     private val dbHelper = DatabaseHelper(context)

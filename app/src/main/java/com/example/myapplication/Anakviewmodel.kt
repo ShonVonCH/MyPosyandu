@@ -87,7 +87,6 @@ class AnakViewModel : ViewModel() {
         tandaiHadir(nama)
     }
 
-    /** Tambahkan nama anak ke set hadir (idempotent: tidak dobel meski dipanggil berkali-kali) */
     private fun tandaiHadir(nama: String) {
         if (nama.isBlank()) return
         _anakHadir.value = _anakHadir.value + nama

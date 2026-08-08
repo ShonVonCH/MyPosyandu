@@ -16,12 +16,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 
-// ═════════════════════════════════════════════════════════════════════
-//  LAYAR DISPLAY / TV — dipasang di ruang tunggu, read-only, auto-refresh.
-//  Tidak ada tombol sama sekali, cukup ditaruh di tablet/TV yang
-//  menyala terus di ruang tunggu posyandu.
-// ═════════════════════════════════════════════════════════════════════
-
 private val DisplayBg     = Color(0xFF0A0A0A)
 private val DisplayGreen  = Color(0xFF00C896)
 private val DisplayGrey   = Color(0xFF9A9A9A)

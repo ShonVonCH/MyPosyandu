@@ -2,10 +2,6 @@ package com.example.myapplication
 
 import kotlin.math.roundToInt
 
-// ════════════════════════════════════════════════════════════
-//  TABEL WHO LENGKAP PER BULAN (0-60)
-//  Sumber: WHO Child Growth Standards 2006
-// ════════════════════════════════════════════════════════════
 
 // ── TB/U Laki-laki ───────────────────────────────────────────
 val tabelTBU_LakiLaki = mapOf(

@@ -58,12 +58,7 @@ class DashboardRepository(context: Context) {
         return count
     }
 
-    /**
-     * Anak hadir BULAN INI (unik per anak_id)
-     * Format tanggal di DB: dd/MM/yyyy
-     * Extract MM/yyyy dengan substr(tanggal, 4, 7) = '06/2026'
-     * DISTINCT anak_id yang hadir di bulan ini, baik dari pemeriksaan maupun vaksin
-     */
+
     fun getAnakHadirBulanIni(): Int {
         val cursor = db.rawQuery(
             """
@@ -86,11 +81,6 @@ class DashboardRepository(context: Context) {
         return count
     }
 
-    /**
-     * Jumlah jadwal posyandu di BULAN INI
-     * Format tanggal di jadwal_posyandu: yyyy-MM-dd (dari API)
-     * strftime works untuk yyyy-MM-dd
-     */
     fun getJadwalBulanIni(): Int {
         val cursor = db.rawQuery(
             """
@@ -106,10 +96,6 @@ class DashboardRepository(context: Context) {
         return count
     }
 
-    /**
-     * Total kehadiran yang diharapkan = jumlah jadwal posyandu di bulan ini × total anak
-     * Jika tidak ada jadwal, fallback ke total anak (1×)
-     */
     fun getTotalKehadiranTarget(): Int {
         val jadwalCount = getJadwalBulanIni()
         val totalAnak = getTotalAnak()
